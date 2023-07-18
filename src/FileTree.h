@@ -33,6 +33,7 @@ public:
     DirNode() = delete;
     DirNode(shared_ptr<MetadataNode> _metadata) : metadata(_metadata) {}
     DirNode(MetadataNode _metadata) : metadata(std::make_shared<MetadataNode>(_metadata)) {}
+    DirNode(std::string _name, long _mtime) : metadata(std::make_shared<MetadataNode>(_name, _mtime)) {}
 
     std::vector<shared_ptr<DirNode>> subdirs;
     std::vector<shared_ptr<MetadataNode>> files;
@@ -84,3 +85,6 @@ std::vector<Change> compare_trees(shared_ptr<DirNode> from_tree, shared_ptr<DirN
 
 std::vector<Change> read_changes(std::istream& stream);
 void write_changes(std::ostream& stream, std::vector<Change> changes);
+bool append_changes(std::string path, std::vector<Change> new_changes);
+
+std::vector<Change> get_new_tree_changes(std::string path);

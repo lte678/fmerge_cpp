@@ -7,10 +7,9 @@
 
 #include <unistd.h>
 #include <getopt.h>
-#include <sys/stat.h>
 #include <csignal>
-#include <fstream>
 #include <iostream>
+#include <fstream>
 
 
 // TODOs:
@@ -19,55 +18,14 @@
 // * 
 //
 
-std::shared_ptr<DirNode> build_tree(std::string path) {
-    std::string filetree_file = join_path(path, ".fmerge/filetree.db");
-    std::string filechanges_file = join_path(path, ".fmerge/filechanges.db");
-
-    auto root_stats = get_file_stats(path);
-    if(!root_stats.has_value()) {
-        std::cerr << "Illegal starting folder" << std::endl;
-        return nullptr;
-    }
-    MetadataNode root_metadata(split_path(path).back(), root_stats->mtime);
-    auto root_node = std::make_shared<DirNode>(root_metadata);
-    update_file_tree(root_node, path); // This is where the current file tree is built in memory
-
-    // Attempt to detect changes
-    auto database_file_stats = get_file_stats(filetree_file);
-    if(!database_file_stats.has_value()) {
-        std::cout << "[Warning] No historical filetree.db containing historical data found. Changes cannot be detected." << std::endl;
-    } else {
-        std::ifstream serialized_tree(filetree_file, std::ios_base::binary); 
-        auto read_from_disk_node = DirNode::deserialize(serialized_tree);
-        // Only check for changes if we were able to load historical data
-        auto new_changes = compare_trees(read_from_disk_node, root_node);
-        //for(const auto& change : new_changes) {
-        //    std::cout << change << std::endl;
-        //}
-
-        // Read old change log
-        std::vector<Change> all_changes{};
-        if(get_file_stats(filechanges_file).has_value()) {
-            std::ifstream serialized_changes(filechanges_file); 
-            all_changes = read_changes(serialized_changes);
-        }
-        // Append new changes
-        all_changes.insert(all_changes.end(), new_changes.begin(), new_changes.end());
-        // Write new change log
-        std::ofstream serialized_changes(filechanges_file, std::ios_base::trunc); 
-        write_changes(serialized_changes, all_changes);
-    }
-
-    // Update the filetree.db with the latest state
-    std::ofstream serialized_tree(filetree_file, std::ios_base::trunc | std::ios_base::binary); 
-    root_node->serialize(serialized_tree);
-
-    return root_node;
-}
-
 
 int server_mode(std::string path) {
     std::cout << "Starting in server mode for \"" << path << "\"" << std::endl;
+
+    if(!exists(path)) {
+        std::cerr << "Illegal starting folder" << std::endl;
+        return 1;
+    }
 
     std::string config_dir = join_path(path, ".fmerge");
     std::string config_file = join_path(config_dir, "config.json");
@@ -78,13 +36,25 @@ int server_mode(std::string path) {
     save_config(config_file, config);
 
     // Build file tree
-    auto filetree = build_tree(path);
+    append_changes(path, get_new_tree_changes(path));
 
     // Wait for peers
     listen_for_peers(4512, config["uuid"], [](Peer client) {
-        std::cout << "Accepted connection from peer with UUID ";
-        print_uuid(std::cout, client.get_uuid());
-        std::cout << std::endl;
+        std::cout << "Accepted connection from peer with UUID " << to_string(client.get_uuid()) << std::endl;
+
+        // TRANSACTION 2.1 <---- Receive relevant changes from remote
+        auto msg_header = MessageHeader::deserialize(client.get_fd());
+        if(msg_header.type != MsgSendChanges) {
+            std::cerr << "Invalid message received during handshake (Received: " << msg_header.type << ")" << std::endl;
+            return;
+        }
+
+        auto changes_msg = ChangesMessage::deserialize(client.get_fd(), msg_header.length);
+        std::cout << "Received " << changes_msg.changes.size() << " changes" << std::endl;
+
+        for(const auto& change : changes_msg.changes) {
+            std::cout << change << std::endl;
+        }
     });
 
     return 0;
@@ -94,6 +64,11 @@ int server_mode(std::string path) {
 int client_mode(std::string path, std::string target_address) {
     std::cout << "Starting in client mode for \"" << path << "\"" << std::endl;
 
+    if(!exists(path)) {
+        std::cerr << "Illegal starting folder" << std::endl;
+        return 1;
+    }
+
     std::string config_dir = join_path(path, ".fmerge");
     std::string config_file = join_path(config_dir, "config.json");
     ensure_dir(config_dir);
@@ -103,13 +78,37 @@ int client_mode(std::string path, std::string target_address) {
     save_config(config_file, config);
 
     // Build file tree
-    auto filetree = build_tree(path);
+    append_changes(path, get_new_tree_changes(path));
 
     // Connect to server
-    connect_to_server(4512, target_address, config["uuid"], [target_address](Peer server) {
-        std::cout << "Connected to " << target_address << " with UUID ";
-        print_uuid(std::cout, server.get_uuid());
-        std::cout << std::endl;
+    connect_to_server(4512, target_address, config["uuid"], 
+    [=, &config](Peer server) {
+        std::cout << "Connected to " << target_address << " with UUID " << to_string(server.get_uuid()) << std::endl;
+
+        // Get the relevant changes
+        std::vector<Change> new_remote_changes;
+        
+        // Get remote json config entry
+        auto remote_config = get_remote_config(config, server.get_uuid());
+        if(remote_config.has_value()) {
+            // Remote that has connected before
+            std::cout << "[Warning] Partial change lists have not been implemented yet!" << std::endl;
+            std::ifstream change_file(join_path(config_dir, "filechanges.db"));
+            new_remote_changes = read_changes(change_file);
+        } else {
+            // Remote that has never connected
+            // Push all changes
+            std::ifstream change_file(join_path(config_dir, "filechanges.db"));
+            new_remote_changes = read_changes(change_file);
+        }
+
+        // TRANSACTION 2.1 ----> Send relevant changes to remote
+        ChangesMessage changes_msg(new_remote_changes);
+        changes_msg.serialize(server.get_fd());
+
+        std::cout << "Transmitted " << new_remote_changes.size() << " changes" << std::endl;
+
+        return 0;
     });
 
     return 0;

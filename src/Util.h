@@ -5,7 +5,8 @@
 #include <iomanip>
 
 
-inline void print_uuid(std::ostream& out, std::array<unsigned char, 16> uuid) {
+static std::string to_string(std::array<unsigned char, 16> uuid) {
+    std::stringstream out{};
     for(int i = 0; i < 4; i++) {
         out << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(uuid[i]);
     }
@@ -25,4 +26,5 @@ inline void print_uuid(std::ostream& out, std::array<unsigned char, 16> uuid) {
     for(int i = 10; i < 16; i++) {
         out << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(uuid[i]);
     }
+    return out.str();
 }

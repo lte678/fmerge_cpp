@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Errors.h"
+#include "FileTree.h"
 
 #include <string>
 #include <functional>
@@ -9,10 +10,12 @@
 enum MessageType {
     MsgIgnore,
     MsgVersion,
+    MsgSendChanges,
     MsgUnknown,
 };
 
 std::ostream& operator<<(std::ostream &out, const MessageType msg);
+
 
 struct MessageHeader {
     MessageHeader() {};
@@ -24,6 +27,7 @@ struct MessageHeader {
     void serialize(int fd) const;
     static MessageHeader deserialize(int fd);
 };
+
 
 struct VersionMessage {
     VersionMessage(int _major, int _minor, std::array<unsigned char, 16> _uuid) : major(_major), minor(_minor), uuid(_uuid) {};
@@ -38,6 +42,19 @@ struct VersionMessage {
 };
 
 
+struct ChangesMessage {
+    // Transmit all the changes that the connection partner has not yet received.
+    // The server decides which information is missing, since this index must be
+    // maintained locally, in accordance with any changes that happen.
+    ChangesMessage(std::vector<Change> _changes) : changes(_changes) {};
+
+    std::vector<Change> changes;
+
+    void serialize(int fd) const;
+    static ChangesMessage deserialize(int fd, unsigned long length);
+};
+
+
 class Peer {
 public:
     Peer() = delete;
@@ -47,6 +64,7 @@ private:
     std::array<unsigned char, 16> uuid;
 public:
     std::array<unsigned char, 16> get_uuid() { return uuid; };
+    int get_fd() { return fd; };
 };
 
 

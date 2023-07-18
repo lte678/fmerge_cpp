@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <uuid/uuid.h>
 #include <array>
+#include <sstream>
 
 
 std::ostream& operator<<(std::ostream &out, const MessageType msg) {
@@ -16,6 +17,8 @@ std::ostream& operator<<(std::ostream &out, const MessageType msg) {
         out << "Ignore";
     } else if (msg == MsgVersion) {
         out << "Version";
+    } else if (msg == MsgSendChanges) {
+        out << "SendChanges";
     } else if (msg == MsgUnknown) {
         out << "Unknown";
     } else {
@@ -76,6 +79,27 @@ VersionMessage VersionMessage::deserialize(int fd) {
     read(fd, uuid.data(), uuid.size());
 
     return VersionMessage(major, minor, uuid);
+}
+
+
+void ChangesMessage::serialize(int fd) const {
+    std::stringstream serialized_changes;
+    write_changes(serialized_changes, changes);
+    std::string serialized_changes2 = serialized_changes.str();
+
+    MessageHeader header(MsgSendChanges, serialized_changes2.length());
+    header.serialize(fd);
+    write(fd, serialized_changes2.c_str(), serialized_changes2.length());
+}
+
+
+ChangesMessage ChangesMessage::deserialize(int fd, unsigned long length) {
+    char *change_buffer = new char[length];
+    read(fd, change_buffer, length); // TODO: Implement blocking read that always returns all bytes of message
+
+    std::stringstream change_stream(change_buffer);
+    auto changes = read_changes(change_stream);
+    return ChangesMessage(changes);
 }
 
 
@@ -191,6 +215,7 @@ void connect_to_server(int port, std::string server_addr, std::string our_uuid, 
 
 
 void client_handshake(int server_sock, std::string our_uuid, std::function<void(Peer)> peer_handler) {
+    // TRANSACTION 1.1 ----> Transmit version
     VersionMessage client_ver(MAJOR_VERSION, MINOR_VERSION, {0});
     if(uuid_parse(our_uuid.c_str(), client_ver.uuid.data()) == -1) {
         std::cerr << "Error parsing our UUID!" << std::endl;
@@ -198,6 +223,7 @@ void client_handshake(int server_sock, std::string our_uuid, std::function<void(
     }
     client_ver.serialize(server_sock);
 
+    // TRANSACTION 1.2 <---- Receive server version
     auto msg_header = MessageHeader::deserialize(server_sock);
     if(msg_header.type != MsgVersion) {
         std::cerr << "Invalid message received during handshake (Received: " << msg_header.type << ")" << std::endl;
@@ -212,5 +238,6 @@ void client_handshake(int server_sock, std::string our_uuid, std::function<void(
         return;
     }
 
+    // HANDSHAKE COMPLETE
     peer_handler(Peer(server_sock, server_ver.uuid));
 }

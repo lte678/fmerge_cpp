@@ -2,6 +2,7 @@
 
 #include "Filesystem.h"
 #include "Errors.h"
+#include "Util.h"
 
 #include <fstream>
 #include <uuid/uuid.h>
@@ -14,7 +15,8 @@ json generate_new_config() {
     uuid_unparse(our_uuid, our_uuid_str);
 
     return json {
-        {"uuid", our_uuid_str}
+        {"uuid", our_uuid_str},
+        {"remotes", json::array()}
     };
 }
 
@@ -37,14 +39,11 @@ void save_config(std::string path, const json &config) {
 }
 
 
-int ensure_dir(std::string path) {
-    // Create dir if it does not exist
-    if(!get_file_stats(path).has_value()) {
-        if(mkdir(path.c_str(), S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) == -1) {
-            print_clib_error("mkdir");
-            return 1;
+optional<json> get_remote_config(json config, std::array<unsigned char, 16> peer_uuid) {
+    for(const json& remote : config["remotes"]) {
+        if(remote["uuid"] == to_string(peer_uuid)) {
+            return remote;
         }
-        std::cout << "Created " << split_path(path).back() << " directory" << std::endl;
     }
-    return 0;
+    return std::nullopt;
 }

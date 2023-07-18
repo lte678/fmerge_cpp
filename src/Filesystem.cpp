@@ -28,6 +28,25 @@ optional<FileStats> get_file_stats(std::string filepath) {
 }
 
 
+bool exists(std::string filepath) {
+    Stat clib_stats;
+    return lstat(filepath.c_str(), &clib_stats) == 0;
+}
+
+
+int ensure_dir(std::string path) {
+    // Create dir if it does not exist
+    if(!get_file_stats(path).has_value()) {
+        if(mkdir(path.c_str(), S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) == -1) {
+            print_clib_error("mkdir");
+            return 1;
+        }
+        std::cout << "Created " << split_path(path).back() << " directory" << std::endl;
+    }
+    return 0;
+}
+
+
 long get_timestamp_now() {
     return time(nullptr);
 }

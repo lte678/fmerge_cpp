@@ -30,6 +30,8 @@ struct FileStats {
 };
 
 optional<FileStats> get_file_stats(std::string filepath);
+bool exists(std::string filepath);
+int ensure_dir(std::string path);
 long get_timestamp_now();
 
 optional<std::string> abs_path(std::string basepath);

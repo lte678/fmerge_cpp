@@ -3,6 +3,7 @@
 #include <cstring>
 #include <valarray>
 #include <sstream>
+#include <fstream>
 
 
 MetadataNode::MetadataNode(std::string _name, long _mtime) : mtime(_mtime) {
@@ -348,4 +349,51 @@ void write_changes(std::ostream& stream, std::vector<Change> changes) {
     }
     auto terminator = Change {.type = ChangeType::TerminateList};
     terminator.serialize(stream);
+}
+
+
+bool append_changes(std::string path, std::vector<Change> new_changes) {
+    std::string filechanges_file = join_path(path, ".fmerge/filechanges.db");
+
+    // Read old change log
+    std::vector<Change> all_changes{};
+    if(exists(filechanges_file)) {
+        std::ifstream serialized_changes(filechanges_file); 
+        all_changes = read_changes(serialized_changes);
+    }
+    // Append new changes
+    all_changes.insert(all_changes.end(), new_changes.begin(), new_changes.end());
+    // Write new change log
+    std::ofstream serialized_changes(filechanges_file, std::ios_base::trunc); 
+    write_changes(serialized_changes, all_changes);
+    return 0;
+}
+
+
+std::vector<Change> get_new_tree_changes(std::string path) {
+    std::string filetree_file = join_path(path, ".fmerge/filetree.db");
+
+    auto root_stats = get_file_stats(path);
+    auto root_node = std::make_shared<DirNode>(split_path(path).back(), root_stats->mtime);
+    update_file_tree(root_node, path); // This is where the current file tree is built in memory
+
+    // Attempt to detect changes
+    std::vector<Change> new_changes;
+    if(!exists(filetree_file)) {
+        std::cout << "No historical filetree.db containing historical data found. Assuming new folder." << std::endl;
+        
+        auto blank_node = std::make_shared<DirNode>(split_path(path).back(), 0);
+        new_changes = compare_trees(blank_node, root_node);
+    } else {
+        std::ifstream serialized_tree(filetree_file, std::ios_base::binary); 
+        auto read_from_disk_node = DirNode::deserialize(serialized_tree);
+        // Only check for changes if we were able to load historical data
+        new_changes =  compare_trees(read_from_disk_node, root_node);
+    }
+
+    // Update the filetree.db with the latest state
+    std::ofstream serialized_tree(filetree_file, std::ios_base::trunc | std::ios_base::binary); 
+    root_node->serialize(serialized_tree);
+
+    return new_changes;
 }
