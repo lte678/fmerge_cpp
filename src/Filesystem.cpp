@@ -157,7 +157,7 @@ namespace fmerge {
             return false;
         }
 
-        for(size_t i = 0; i < s1.length(); i++) {
+        for(size_t i = 0; i < starts_with.length(); i++) {
             if(s1[i] != starts_with[i]) {
                 return false;
             }
@@ -169,11 +169,11 @@ namespace fmerge {
     bool path_ignored(const std::string &path, bool is_dir) {
         std::string compare_path = path;
         if(is_dir) {
-            compare_path += "/";
+            compare_path.append("/");
         }
 
         // Ignore .fmerge directory
-        if(str_starts_with(path, ".fmerge/")) {
+        if(str_starts_with(compare_path, ".fmerge/")) {
             return true;
         }
         return false;

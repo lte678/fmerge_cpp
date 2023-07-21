@@ -22,4 +22,24 @@ namespace fmerge {
         }
         std::cout << "] " << trailing << " " << std::round(progress * 100.0f) << "%\r";
     }
+
+    char prompt_choice(const std::string &options) {
+        std::string response;
+        while(true) {
+            std::cout << "[";
+            for(size_t i = 0; i < options.length(); i++) {
+                if(i != 0) {
+                    std::cout << "/";
+                }
+                std::cout << options[i];
+            }
+            std::cout << "] ";
+            std::cin >> response;
+            if(response.length() > 1 || (options.find(response[0]) == std::string::npos)) {
+                std::cout << "Invalid option." << std::endl;
+            } else {
+                return response[0];
+            }
+        }
+    }
 }

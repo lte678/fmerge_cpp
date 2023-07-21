@@ -3,6 +3,7 @@
 #include "Config.h"
 #include "Connection.h"
 #include "NetProtocol.h"
+#include "MergeAlgorithms.h"
 
 #include <thread>
 #include <atomic>
@@ -18,6 +19,8 @@ namespace fmerge {
         enum State {
             AwaitingVersion,
             SendTree,
+            ResolvingConflicts,
+            SyncingFiles,
             Finished
         };
     public:
@@ -43,6 +46,7 @@ namespace fmerge {
         std::string path;
         std::atomic<State> state;
         std::vector<Change> peer_changes;
+        SortedOperationSet pending_operations;
 
         std::thread listener_thread_handle;
     };

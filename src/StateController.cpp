@@ -2,7 +2,7 @@
 
 #include "NetProtocol.h"
 #include "Version.h"
-#include "MergeAlgorithms.h"
+#include "Terminal.h"
 
 #include <memory>
 #include <fstream>
@@ -84,8 +84,24 @@ namespace fmerge {
         print_sorted_changes(sorted_peer_changes);
 
         std::cout << "Merging..." << std::endl;
-        auto merged_sorted_changes = merge_change_sets(sorted_peer_changes, sort_changes_by_file(read_changes(path)));
-        print_sorted_changes(merged_sorted_changes);
+        // These start out empty by default
+        std::unordered_map<std::string, ConflictResolution> resolutions{};
+        auto [merged_sorted_changes, operations, conflicts] = merge_change_sets(sort_changes_by_file(read_changes(path)), sorted_peer_changes, resolutions);
+        if(conflicts.size() > 0) {
+            state = ResolvingConflicts;
+            std::cerr << "!!! Merge conflicts occured for the following paths:" << std::endl;
+            for(const auto &conflict : conflicts) { 
+                std::cout << "    " << conflict.conflict_key << std::endl;
+            }
+
+            prompt_choice("rl");
+        } else {
+            pending_operations = operations;
+            //print_sorted_changes(merged_sorted_changes);
+            std::cout << "Pending operations:" << std::endl;
+            print_sorted_operations(pending_operations);
+            state = SyncingFiles;
+        }
 
         exit(0);
     }
