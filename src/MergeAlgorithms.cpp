@@ -35,11 +35,14 @@ namespace fmerge {
     SortedChangeSet merge_change_sets(const SortedChangeSet& a, const SortedChangeSet& b) {
         SortedChangeSet merged_set{};
 
+        bool merge_conflict_occurred{false};
+
         // Work starting with the 'a' branch, but this process MUST be symmetric!
         for(const auto &file_changes : a) {
             if(change_set_contains(b, file_changes.first)) {
                 // TODO: Add some smarter merge conflict resolutions
                 std::cerr << "[Error] Unresolvable merge conflict for '" << file_changes.first << "'!" << std::endl;
+                merge_conflict_occurred = true;
             } else {
                 // Trivial merge. The other branch never did anything with this file
                 merged_set.emplace(file_changes.first, file_changes.second);
@@ -52,6 +55,10 @@ namespace fmerge {
                 // Trivial merge. The other branch never did anything with this file
                 merged_set.emplace(file_changes.first, file_changes.second);
             }
+        }
+
+        if(merge_conflict_occurred) {
+            return {};
         }
 
         // Done!

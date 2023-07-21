@@ -1,5 +1,7 @@
 #include "FileTree.h"
 
+#include "Terminal.h"
+
 #include <cstring>
 #include <valarray>
 #include <sstream>
@@ -197,15 +199,35 @@ namespace fmerge {
     }
 
 
-    void update_file_tree(shared_ptr<DirNode> base_node, std::string base_path) {
-        for_file_in_dir(base_path, "", 
-            [base_node](std::string path, const FileStats& stats) {
-                auto path_tokens = split_path(path);
+    void update_file_tree(shared_ptr<DirNode> base_node, std::string base_path, bool show_loading_bar) {        
+        // Create file number total for loading bar
+        unsigned int total_number_files{0};
+        if(show_loading_bar) {
+            for_file_in_dir(base_path,
+                [&total_number_files](auto path, auto stats) {
+                    if(path_ignored(path, stats.type == FileType::Directory)) {
+                        return;
+                    }
+                    total_number_files++;
+                }
+            );
+        }
 
-                // Ignore .fmerge directory
-                if(path_tokens[0] == ".fmerge") {
+
+        unsigned int num_files_processed{0};
+        for_file_in_dir(base_path,
+            [=, &num_files_processed](std::string path, const FileStats& stats) {
+                if(path_ignored(path, stats.type == FileType::Directory)) {
                     return;
                 }
+
+                num_files_processed++;
+                if(show_loading_bar && (num_files_processed % 100) == 0) {
+                    // Go back to previous line
+                    print_progress_bar(static_cast<float>(num_files_processed) / static_cast<float>(total_number_files), "Building File Tree");
+                }
+
+                auto path_tokens = split_path(path);
 
                 shared_ptr<DirNode> parent_node;
                 if(path_tokens.size() > 1) {
@@ -245,6 +267,11 @@ namespace fmerge {
                 }
             }
         );
+        
+        if(show_loading_bar) {
+            print_progress_bar(1.0f, "Building File Tree");
+            std::cout << std::endl;
+        }
     }
 
 
@@ -363,12 +390,24 @@ namespace fmerge {
     }
 
 
-    void serialize_changes(std::ostream& stream, std::vector<Change> changes) {
+    void serialize_changes(std::ostream& stream, std::vector<Change> changes, bool show_loading_bar) {
+        size_t total_changes{changes.size()};
+        size_t changes_count{0};
+
         for(const auto& change : changes) {
+            changes_count++;
+            if(show_loading_bar && (changes_count % 500) == 0) {
+                print_progress_bar(static_cast<float>(changes_count) / static_cast<float>(total_changes), "Write Changes");
+            }
             change.serialize(stream);
         }
         auto terminator = Change {.type = ChangeType::TerminateList};
         terminator.serialize(stream);
+
+        if(show_loading_bar) {
+            print_progress_bar(1.0f, "Write Changes");
+            std::cout << std::endl;
+        }
     }
 
 
@@ -380,7 +419,7 @@ namespace fmerge {
         all_changes.insert(all_changes.end(), new_changes.begin(), new_changes.end());
         // Write new change log
         std::ofstream serialized_changes(filechanges_file, std::ios_base::trunc); 
-        serialize_changes(serialized_changes, all_changes);
+        serialize_changes(serialized_changes, all_changes, true);
         return 0;
     }
 

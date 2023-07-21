@@ -112,7 +112,7 @@ namespace fmerge {
     }
 
 
-    void for_file_in_dir(std::string basepath, std::string prefix, std::function<void(std::string, const FileStats&)> f) {
+    void _for_file_in_dir(std::string basepath, std::string prefix, std::function<void(std::string, const FileStats&)> f) {
         // basepath must already be normalized with realpath/abs_path
         // The child files and directories are returned with prefix + / + filename
 
@@ -121,6 +121,15 @@ namespace fmerge {
         if(dir == nullptr) {
             print_clib_error("opendir");
             std::cerr << "^^^ occurred for " << basepath << std::endl;
+            
+            // We have reached the limit on the maximum number of files, globally or for this process.
+            if(errno == ENFILE) {
+                std::cerr << "[Error] System-wide file limit hit." << std::endl;
+                exit(1);
+            } else if(errno == EMFILE) {
+                std::cerr << "[Error] Process file limit hit." << std::endl;
+                exit(1);
+            }
             return;
         }
 
@@ -134,10 +143,39 @@ namespace fmerge {
                 auto file_stats = get_file_stats(subdirpath);
                 if(file_stats.has_value()) {
                     f(relative_path, *file_stats);
-                    if(file_stats->type == FileType::Directory) for_file_in_dir(subdirpath, relative_path, f);
+                    if(file_stats->type == FileType::Directory) _for_file_in_dir(subdirpath, relative_path, f);
                 }
             }
         }
+        closedir(dir);
     }
     
+
+    static bool str_starts_with(std::string s1, std::string starts_with) {
+        // Returns true if the strings are equal, up to the length of the second string
+        if(starts_with.length() > s1.length()) {
+            return false;
+        }
+
+        for(size_t i = 0; i < s1.length(); i++) {
+            if(s1[i] != starts_with[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+
+    bool path_ignored(const std::string &path, bool is_dir) {
+        std::string compare_path = path;
+        if(is_dir) {
+            compare_path += "/";
+        }
+
+        // Ignore .fmerge directory
+        if(str_starts_with(path, ".fmerge/")) {
+            return true;
+        }
+        return false;
+    }
 }

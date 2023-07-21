@@ -82,9 +82,11 @@ namespace fmerge {
         state_lock.unlock();
 
         print_sorted_changes(sorted_peer_changes);
-        
+
         std::cout << "Merging..." << std::endl;
         auto merged_sorted_changes = merge_change_sets(sorted_peer_changes, sort_changes_by_file(read_changes(path)));
         print_sorted_changes(merged_sorted_changes);
+
+        exit(0);
     }
 }

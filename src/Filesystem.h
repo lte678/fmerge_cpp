@@ -42,6 +42,11 @@ namespace fmerge {
     std::string join_path(std::string p1, std::string p2);
     std::string path_to_str(std::vector<std::string> tokens);
 
-    void for_file_in_dir(std::string basepath, std::string prefix, std::function<void(std::string, const FileStats&)> f);
-    
+    void _for_file_in_dir(std::string basepath, std::string prefix, std::function<void(std::string, const FileStats&)> f);
+    inline void for_file_in_dir(std::string basepath, std::function<void(std::string, const FileStats&)> f) {
+        _for_file_in_dir(basepath, "", f);
+    }
+
+    // Check if path should be ignored
+    bool path_ignored(const std::string &path, bool is_dir);
 }

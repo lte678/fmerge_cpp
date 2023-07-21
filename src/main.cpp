@@ -2,7 +2,6 @@
 #include "FileTree.h"
 #include "Version.h"
 #include "Connection.h"
-#include "Util.h"
 #include "Config.h"
 #include "StateController.h"
 
@@ -40,6 +39,8 @@ int server_mode(std::string path) {
 
     // Build file tree
     append_changes(path, get_new_tree_changes(path));
+
+    std::cout << "Waiting for peer connections..." << std::endl;
 
     // Wait for peers
     listen_for_peers(4512, [=, &config](auto conn) {
