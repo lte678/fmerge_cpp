@@ -1,9 +1,10 @@
 #include "Filesystem.h"
 #include "FileTree.h"
 #include "Version.h"
-#include "Peer.h"
+#include "Connection.h"
 #include "Util.h"
 #include "Config.h"
+#include "StateController.h"
 
 #include <unistd.h>
 #include <getopt.h>
@@ -17,6 +18,8 @@
 // * Also use nsec component of mtime
 // * 
 //
+
+using namespace fmerge;
 
 
 int server_mode(std::string path) {
@@ -39,22 +42,11 @@ int server_mode(std::string path) {
     append_changes(path, get_new_tree_changes(path));
 
     // Wait for peers
-    listen_for_peers(4512, config["uuid"], [](Peer client) {
-        std::cout << "Accepted connection from peer with UUID " << to_string(client.get_uuid()) << std::endl;
+    listen_for_peers(4512, [=, &config](auto conn) {
+        std::cout << "Accepted connection from " << conn->get_address() << std::endl;
 
-        // TRANSACTION 2.1 <---- Receive relevant changes from remote
-        auto msg_header = MessageHeader::deserialize(client.get_fd());
-        if(msg_header.type != MsgSendChanges) {
-            std::cerr << "Invalid message received during handshake (Received: " << msg_header.type << ")" << std::endl;
-            return;
-        }
-
-        auto changes_msg = ChangesMessage::deserialize(client.get_fd(), msg_header.length);
-        std::cout << "Received " << changes_msg.changes.size() << " changes" << std::endl;
-
-        for(const auto& change : changes_msg.changes) {
-            std::cout << change << std::endl;
-        }
+        StateController controller(std::move(conn), config);
+        controller.run();
     });
 
     return 0;
@@ -81,34 +73,11 @@ int client_mode(std::string path, std::string target_address) {
     append_changes(path, get_new_tree_changes(path));
 
     // Connect to server
-    connect_to_server(4512, target_address, config["uuid"], 
-    [=, &config](Peer server) {
-        std::cout << "Connected to " << target_address << " with UUID " << to_string(server.get_uuid()) << std::endl;
-
-        // Get the relevant changes
-        std::vector<Change> new_remote_changes;
+    connect_to_server(4512, target_address, [=, &config](auto conn) {
+        std::cout << "Connected to " << conn->get_address() << std::endl;
         
-        // Get remote json config entry
-        auto remote_config = get_remote_config(config, server.get_uuid());
-        if(remote_config.has_value()) {
-            // Remote that has connected before
-            std::cout << "[Warning] Partial change lists have not been implemented yet!" << std::endl;
-            std::ifstream change_file(join_path(config_dir, "filechanges.db"));
-            new_remote_changes = read_changes(change_file);
-        } else {
-            // Remote that has never connected
-            // Push all changes
-            std::ifstream change_file(join_path(config_dir, "filechanges.db"));
-            new_remote_changes = read_changes(change_file);
-        }
-
-        // TRANSACTION 2.1 ----> Send relevant changes to remote
-        ChangesMessage changes_msg(new_remote_changes);
-        changes_msg.serialize(server.get_fd());
-
-        std::cout << "Transmitted " << new_remote_changes.size() << " changes" << std::endl;
-
-        return 0;
+        StateController controller(std::move(conn), config);
+        controller.run();
     });
 
     return 0;
