@@ -47,7 +47,7 @@ namespace fmerge::protocol {
 
     ChangesMessage::ChangesMessage(std::vector<Change> _changes) : changes(_changes), serialized_changes("") {
         std::stringstream ser_stream;
-        write_changes(ser_stream, changes);
+        serialize_changes(ser_stream, changes);
         serialized_changes = ser_stream.str();
     }
 
@@ -62,7 +62,7 @@ namespace fmerge::protocol {
         receive(change_buffer, length);
 
         std::stringstream change_stream(change_buffer);
-        auto changes = read_changes(change_stream);
+        auto changes = deserialize_changes(change_stream);
         return ChangesMessage(changes);
     }
 

@@ -2,6 +2,7 @@
 
 #include "NetProtocol.h"
 #include "Version.h"
+#include "MergeAlgorithms.h"
 
 #include <memory>
 #include <fstream>
@@ -62,13 +63,7 @@ namespace fmerge {
 
 
     std::shared_ptr<protocol::Message> StateController::handle_changes_request() {
-        std::string changes_path = join_path(path, ".fmerge/filechanges.db");
-        std::vector<Change> changes{};
-        if(exists(changes_path)) {
-            std::ifstream changes_file(changes_path);
-            changes = read_changes(changes_file);
-        }
-        return std::make_shared<protocol::ChangesMessage>(changes);
+        return std::make_shared<protocol::ChangesMessage>(read_changes(path));
     }
 
     void StateController::handle_changes_response(std::shared_ptr<protocol::Message> msg) {
@@ -78,9 +73,18 @@ namespace fmerge {
         peer_changes = changes_msg->changes;
 
         std::cout << "Received " << peer_changes.size() << " changes from peer" << std::endl;
-        for(const auto &change : peer_changes) {
-            std::cout << "    " << change << std::endl;
-        }
+        //for(const auto &change : peer_changes) {
+        //    std::cout << "    " << change << std::endl;
+        //}
+
+        auto sorted_peer_changes = sort_changes_by_file(peer_changes);
+
         state_lock.unlock();
+
+        print_sorted_changes(sorted_peer_changes);
+        
+        std::cout << "Merging..." << std::endl;
+        auto merged_sorted_changes = merge_change_sets(sorted_peer_changes, sort_changes_by_file(read_changes(path)));
+        print_sorted_changes(merged_sorted_changes);
     }
 }

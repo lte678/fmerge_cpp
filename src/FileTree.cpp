@@ -4,6 +4,7 @@
 #include <valarray>
 #include <sstream>
 #include <fstream>
+#include <iomanip>
 
 
 namespace fmerge {
@@ -137,21 +138,26 @@ namespace fmerge {
     }
 
 
-    std::ostream& operator<<(std::ostream& os, const Change& change) {
-        switch(change.type) {
+    std::ostream& operator<<(std::ostream& os, ChangeType change_type) {
+        switch(change_type) {
         case ChangeType::Modification:
-            os << "Modification   ";
+            os << "Modification";
             break;
         case ChangeType::Creation:
-            os << "Creation       ";
+            os << "Creation";
             break;
         case ChangeType::Deletion:
-            os << "Deletion       ";
+            os << "Deletion";
             break;
         default:
-            os << "Unknown Change ";
+            os << "Unknown Change";
         }
-        os << change.path;
+        return os;
+    }
+
+
+    std::ostream& operator<<(std::ostream& os, const Change& change) {
+        os << std::setw(16) << std::left << change.type << change.path;
         return os;
     }
 
@@ -242,16 +248,28 @@ namespace fmerge {
     }
 
 
-    optional<Change> compare_metadata(shared_ptr<MetadataNode> from_node, shared_ptr<MetadataNode> to_node, std::string path) {
+    optional<Change> compare_metadata(shared_ptr<MetadataNode> from_node, shared_ptr<MetadataNode> to_node, std::string path, bool is_dir) {
         // Logic to determine what has changed.
         // This is one of the most critical parts of this application
         
         if(from_node && to_node) {
-            if(from_node->mtime == to_node->mtime) {
+            // Ignore all directory changes other than creation and deletion
+            if(is_dir) {
                 return std::nullopt;
+            }
+            // Compare modification times for files
+            if(from_node->mtime < to_node->mtime) {
+                return Change {
+                    .type = ChangeType::Modification,
+                    .earliest_change_time = to_node->mtime,
+                    .latest_change_time = 0,
+                    .path = path,
+                };
             } else if(from_node->mtime > to_node->mtime) {
                 std::cout << "[Warning] Modification time of " << path << " lies " << 
                     from_node->mtime - to_node->mtime << "s in the future!" << std::endl;
+                return std::nullopt;
+            } else {
                 return std::nullopt;
             }
         }
@@ -265,7 +283,7 @@ namespace fmerge {
             };
         }
 
-        if(to_node && (!from_node || (from_node->mtime < to_node->mtime))) {
+        if(to_node && !from_node) {
             return Change {
                 .type = ChangeType::Modification,
                 .earliest_change_time = to_node->mtime,
@@ -295,7 +313,7 @@ namespace fmerge {
                 } else {
                     to_metadata = to_tree->get_child_file(path);
                 }
-                auto change = compare_metadata(from_metadata, to_metadata, path_to_str(path));
+                auto change = compare_metadata(from_metadata, to_metadata, path_to_str(path), is_dir);
                 if(change.has_value()) changes.push_back(*change);
             }
         );
@@ -331,7 +349,7 @@ namespace fmerge {
     }
 
 
-    std::vector<Change> read_changes(std::istream& stream) {
+    std::vector<Change> deserialize_changes(std::istream& stream) {
         std::vector<Change> changes;
 
         Change current_change{.type = ChangeType::Unknown};
@@ -345,7 +363,7 @@ namespace fmerge {
     }
 
 
-    void write_changes(std::ostream& stream, std::vector<Change> changes) {
+    void serialize_changes(std::ostream& stream, std::vector<Change> changes) {
         for(const auto& change : changes) {
             change.serialize(stream);
         }
@@ -356,19 +374,26 @@ namespace fmerge {
 
     bool append_changes(std::string path, std::vector<Change> new_changes) {
         std::string filechanges_file = join_path(path, ".fmerge/filechanges.db");
-
-        // Read old change log
-        std::vector<Change> all_changes{};
-        if(exists(filechanges_file)) {
-            std::ifstream serialized_changes(filechanges_file); 
-            all_changes = read_changes(serialized_changes);
-        }
+        
+        auto all_changes = read_changes(path);
         // Append new changes
         all_changes.insert(all_changes.end(), new_changes.begin(), new_changes.end());
         // Write new change log
         std::ofstream serialized_changes(filechanges_file, std::ios_base::trunc); 
-        write_changes(serialized_changes, all_changes);
+        serialize_changes(serialized_changes, all_changes);
         return 0;
+    }
+
+
+    std::vector<Change> read_changes(std::string base_dir) {
+        // Note: This function fails silently and returns an empty vector if the file is not found
+        std::string changes_path = join_path(base_dir, ".fmerge/filechanges.db");
+        std::vector<Change> changes{};
+        if(exists(changes_path)) {
+            std::ifstream changes_file(changes_path);
+            changes = deserialize_changes(changes_file);
+        }
+        return changes;
     }
 
 

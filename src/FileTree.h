@@ -64,6 +64,9 @@ namespace fmerge {
     };
 
 
+    std::ostream& operator<<(std::ostream& os, ChangeType change_type);
+
+
     class Change {
     public:
         ChangeType type;
@@ -82,12 +85,13 @@ namespace fmerge {
     };
 
     void update_file_tree(shared_ptr<DirNode> base_node, std::string base_path);
-    optional<Change> compare_metadata(shared_ptr<MetadataNode> from_node, shared_ptr<MetadataNode> to_node, std::string path);
+    optional<Change> compare_metadata(shared_ptr<MetadataNode> from_node, shared_ptr<MetadataNode> to_node, std::string path, bool is_dir);
     std::vector<Change> compare_trees(shared_ptr<DirNode> from_tree, shared_ptr<DirNode> to_tree);
 
-    std::vector<Change> read_changes(std::istream& stream);
-    void write_changes(std::ostream& stream, std::vector<Change> changes);
+    std::vector<Change> deserialize_changes(std::istream& stream);
+    void serialize_changes(std::ostream& stream, std::vector<Change> changes);
     bool append_changes(std::string path, std::vector<Change> new_changes);
+    std::vector<Change> read_changes(std::string base_dir);
 
     std::vector<Change> get_new_tree_changes(std::string path);
 
