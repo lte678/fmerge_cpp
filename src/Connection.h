@@ -30,7 +30,9 @@ namespace fmerge {
 
         void listener_thread(RequestCallback request_callback);
 
-        struct PendingResponse { transmission_idx index; ResponseCallback callback; };
+        struct PendingResponse { transmission_idx index; protocol::MessageType type; ResponseCallback callback; };
+
+        std::mutex response_lock;
         std::vector<PendingResponse> pending_responses;
     public:
         void send_request(protocol::MessageType request_type, ResponseCallback response_callback);

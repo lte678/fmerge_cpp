@@ -34,13 +34,13 @@ namespace fmerge {
         unsigned short type = static_cast<protocol::MessageType>(le16toh(nettype));
         bool is_response = (type & 0x8000) != 0;
 
-        unsigned long netlength{};
-        receive(&netlength, sizeof(netlength));
-        unsigned long length = le64toh(netlength);
-
         unsigned short netindex{};
         receive(&netindex, sizeof(netindex));
         unsigned short index = le16toh(netindex);
+
+        unsigned long netlength{};
+        receive(&netlength, sizeof(netlength));
+        unsigned long length = le64toh(netlength);
 
         return MessageHeader(type & 0x7FFF, length, index, is_response);
     }
@@ -52,11 +52,13 @@ namespace fmerge {
         transmission_idx current_index = message_index.fetch_add(1); 
         // Note down our message index and the callback we should call once we receive a 
         // response
-        transmit_lock.lock();
-        pending_responses.push_back({.index = current_index, .callback = response_callback});
+        std::lock(transmit_lock, response_lock);
+        pending_responses.push_back({.index = current_index, .type = request_type, .callback = response_callback});
         // Now send header-only request message
         MessageHeader::make_request_header(request_type, current_index).serialize(fd);
         transmit_lock.unlock();
+        response_lock.unlock();
+        std::cout << "[Peer <- Local] Request " << protocol::msg_type_to_string(request_type) << std::endl;
     }
 
 
@@ -65,35 +67,52 @@ namespace fmerge {
     }
 
     void Connection::listener_thread(RequestCallback request_callback) {
-        while(true) {
-            auto receive_func = [this](auto buf, auto len) { receive(buf, len); };
-            auto received_header = MessageHeader::deserialize(receive_func);
+        try {
+            while(true) {
+                auto receive_func = [this](auto buf, auto len) { receive(buf, len); };
+                auto received_header = MessageHeader::deserialize(receive_func);
 
-            if(received_header.is_response) {
-                std::cout << "Peer sent " << protocol::msg_type_to_string(received_header.type) << " response" << std::endl;
-                // Response message from peer
-                auto pending_it = pending_responses.begin();
-                for(; pending_it != pending_responses.end(); pending_it++) {
-                    if(pending_it->index == received_header.index) {
-                        pending_it->callback(protocol::deserialize_packet(received_header.type, received_header.length, receive_func));
+                if(received_header.is_response) {
+                    std::cout << "[Peer -> Local] Response " << protocol::msg_type_to_string(received_header.type) << std::endl;
+                    // Response message from peer
+                    response_lock.lock();
+                    std::shared_ptr<PendingResponse> request{nullptr};
+                    for(auto pending_it = pending_responses.begin(); pending_it != pending_responses.end(); pending_it++) {
+                        if(pending_it->index == received_header.index) {
+                            // We found the request this response fulfills
+                            if(received_header.type == pending_it->type) {
+                                request = std::make_shared<PendingResponse>(*pending_it);
+                            } else {
+                                // Delete the pending response object
+                                std::cerr << "Receive message type is invalid with request (" << protocol::msg_type_to_string(pending_it->type) << ")" << std::endl;
+                            }
+                            pending_responses.erase(pending_it);
+                            break;
+                        }
                     }
-                }
-                // Delete the pending response object
-                pending_responses.erase(pending_it);
-            } else {
-                std::cout << "Peer sent request for " << protocol::msg_type_to_string(received_header.type) << std::endl;
-                // Request message from peer
-                auto response = request_callback(received_header.type);
-                if(response) {
-                    // Send back the response
-                    transmit_lock.lock();
-                    MessageHeader(response, received_header.index).serialize(fd);
-                    response->serialize(fd);
-                    transmit_lock.unlock();
+                    response_lock.unlock();
+
+                    // Call the callback outside of response_lock, since it may invoke another transmission.
+                    request->callback(protocol::deserialize_packet(received_header.type, received_header.length, receive_func));
                 } else {
-                    std::cerr << "Error: Cannot send response for " << protocol::msg_type_to_string(received_header.type) << " request" << std::endl;
-                }
-            }   
+                    std::cout << "[Peer -> Local] Request " << protocol::msg_type_to_string(received_header.type) << std::endl;
+                    // Request message from peer
+                    auto response = request_callback(received_header.type);
+                    if(response) {
+                        // Send back the response
+                        std::cout << "[Peer <- Local] Response " << protocol::msg_type_to_string(received_header.type) << std::endl;
+                        transmit_lock.lock();
+                        MessageHeader(response, received_header.index).serialize(fd);
+                        response->serialize(fd);
+                        transmit_lock.unlock();
+                    } else {
+                        std::cerr << "Error: Cannot send response for " << protocol::msg_type_to_string(received_header.type) << " request" << std::endl;
+                    }
+                }   
+            }
+        } catch(const std::runtime_error& e) {
+            std::cout << "Exited: " << e.what() << std::endl;
+            exit(0);
         }
     }
 

@@ -4,6 +4,7 @@
 #include "Version.h"
 
 #include <memory>
+#include <fstream>
 #include <uuid/uuid.h>
 
 
@@ -22,6 +23,8 @@ namespace fmerge {
     std::shared_ptr<protocol::Message> StateController::handle_request(protocol::MessageType msg_type) {
         if(msg_type == protocol::MsgVersion) {
             return handle_version_request();
+        } else if(msg_type == protocol::MsgChanges) {
+            return handle_changes_request();
         }
         // Error message is handled caller function
         return nullptr;
@@ -40,11 +43,7 @@ namespace fmerge {
 
 
     void StateController::handle_version_response(std::shared_ptr<protocol::Message> msg) {
-        if(msg->type() != protocol::MsgVersion) {
-            std::cerr << "Received invalid response to version request!" << std::endl;
-            return;
-        }
-        std::shared_ptr<protocol::VersionMessage> ver_msg = std::dynamic_pointer_cast<protocol::VersionMessage>(msg);
+        auto ver_msg = std::dynamic_pointer_cast<protocol::VersionMessage>(msg);
         
         if (ver_msg->major != MAJOR_VERSION || ver_msg->minor != MINOR_VERSION) { 
             std::cerr << "Peer has invalid version!";
@@ -57,7 +56,31 @@ namespace fmerge {
             state = State::SendTree;
 
             std::cout << "Requesting file tree" << std::endl;
+            c->send_request(protocol::MsgChanges, [this](auto msg) { handle_changes_response(msg); });
         }
     }
 
+
+    std::shared_ptr<protocol::Message> StateController::handle_changes_request() {
+        std::string changes_path = join_path(path, ".fmerge/filechanges.db");
+        std::vector<Change> changes{};
+        if(exists(changes_path)) {
+            std::ifstream changes_file(changes_path);
+            changes = read_changes(changes_file);
+        }
+        return std::make_shared<protocol::ChangesMessage>(changes);
+    }
+
+    void StateController::handle_changes_response(std::shared_ptr<protocol::Message> msg) {
+        auto changes_msg = std::dynamic_pointer_cast<protocol::ChangesMessage>(msg);
+
+        state_lock.lock();
+        peer_changes = changes_msg->changes;
+
+        std::cout << "Received " << peer_changes.size() << " changes from peer" << std::endl;
+        for(const auto &change : peer_changes) {
+            std::cout << "    " << change << std::endl;
+        }
+        state_lock.unlock();
+    }
 }

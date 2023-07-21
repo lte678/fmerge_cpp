@@ -50,8 +50,9 @@ namespace fmerge::protocol {
         // Transmit all the changes that the connection partner has not yet received.
         // The server decides which information is missing, since this index must be
         // maintained locally, in accordance with any changes that happen.
-        ChangesMessage(std::vector<Change> changes);
+        ChangesMessage(std::vector<Change> _changes);
 
+        std::vector<Change> changes;
         std::string serialized_changes;
 
         void serialize(int fd) const override;

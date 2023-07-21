@@ -45,7 +45,7 @@ int server_mode(std::string path) {
     listen_for_peers(4512, [=, &config](auto conn) {
         std::cout << "Accepted connection from " << conn->get_address() << std::endl;
 
-        StateController controller(std::move(conn), config);
+        StateController controller(std::move(conn), path, config);
         controller.run();
     });
 
@@ -76,7 +76,7 @@ int client_mode(std::string path, std::string target_address) {
     connect_to_server(4512, target_address, [=, &config](auto conn) {
         std::cout << "Connected to " << conn->get_address() << std::endl;
         
-        StateController controller(std::move(conn), config);
+        StateController controller(std::move(conn), path, config);
         controller.run();
     });
 
