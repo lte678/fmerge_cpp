@@ -13,6 +13,12 @@ namespace fmerge {
 
     typedef unsigned short transmission_idx;
 
+    constexpr int MAX_RESPONCE_WORKERS{16};
+
+    class connection_terminated_exception : public std::exception {
+    public:
+        char const* what() const noexcept { return "Connection terminated"; }
+    };
 
     class Connection {
     public:
@@ -27,6 +33,10 @@ namespace fmerge {
         std::string address;
         std::atomic<transmission_idx> message_index{0};
         std::thread listener_thread_handle;
+
+        std::atomic<int> resp_handler_worker_count;
+        std::vector<std::thread> resp_handler_workers;
+        void join_finished_workers();
 
         void listener_thread(RequestCallback request_callback);
 

@@ -50,8 +50,15 @@ namespace fmerge {
         transmission_idx current_index = message_index.fetch_add(1); 
         // Note down our message index and the callback we should call once we receive a 
         // response
+
+        while(resp_handler_worker_count >= MAX_RESPONCE_WORKERS) {
+            // We will be spending a lot of time here. We should not be using a busy lock, since it will limit us to 100 ops per second.
+            // std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+
         std::lock(transmit_lock, response_lock);
         pending_responses.push_back({.index = current_index, .type = req->type(), .callback = response_callback});
+        resp_handler_worker_count++;
         // Now send header-only request message
         MessageHeader(req, current_index).serialize(fd);
         req->serialize(fd);
@@ -63,11 +70,25 @@ namespace fmerge {
     }
 
 
+    void Connection::join_finished_workers() {
+        for(auto &t : resp_handler_workers) {
+            if(t.joinable()) t.join();
+        }
+    }
+
+
     void Connection::listen(RequestCallback request_callback) {
         listener_thread_handle = std::thread([=]() { listener_thread(request_callback); });
     }
 
     void Connection::listener_thread(RequestCallback request_callback) {
+        // To prevent the application from locking up, this thread must always return back to a state of listening
+        // without any blocking writes. Otherwise the two clients can deadlock.
+        //
+        // This would imply creating infinite threads, if we just put each write into a new thread.
+        // Thus, we should block on creating new requests, so we can also limit the max number of responses that we can
+        // possibly receive.
+
         try {
             while(true) {
                 auto receive_func = [this](auto buf, auto len) { receive(buf, len); };
@@ -99,12 +120,13 @@ namespace fmerge {
                     // Response message from peer
                     // Find the callback within the pending responses.
                     response_lock.lock();
-                    std::shared_ptr<PendingResponse> request{nullptr};
+                    ResponseCallback resp_callback;
                     for(auto pending_it = pending_responses.begin(); pending_it != pending_responses.end(); pending_it++) {
                         if(pending_it->index == received_header.index) {
                             // We found the request this response fulfills
                             if(received_header.raw_type == pending_it->type) {
-                                request = std::make_shared<PendingResponse>(*pending_it);
+                                // Copy callback
+                                resp_callback = pending_it->callback;
                             } else {
                                 // Delete the pending response object
                                 std::cerr << "Receive message type " << protocol::msg_type_to_string(received_header.raw_type) << " is invalid with request (" << protocol::msg_type_to_string(pending_it->type) << ")" << std::endl;
@@ -116,10 +138,11 @@ namespace fmerge {
                     response_lock.unlock();
 
                     // Call the callback outside of response_lock, since it may invoke another transmission.
-                    request->callback(received_packet);
+                    join_finished_workers(); // Try joining any finished processes
+                    resp_handler_workers.push_back(std::thread{ [this, resp_callback, received_packet]() { resp_callback(received_packet); resp_handler_worker_count--; } });
                 }   
             }
-        } catch(const std::runtime_error& e) {
+        } catch(const connection_terminated_exception& e) {
             std::cout << "Exited: " << e.what() << std::endl;
             exit(0);
         }
@@ -133,7 +156,7 @@ namespace fmerge {
             read += received;
 
             if(received == 0) {
-                throw std::runtime_error("Connection terminated");
+                throw connection_terminated_exception();
             } else if(received == -1) {
                 print_clib_error("recv");
                 throw std::runtime_error("Connection failed");

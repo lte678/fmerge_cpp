@@ -37,7 +37,9 @@ namespace fmerge {
         void handle_file_transfer_response(std::shared_ptr<protocol::Message> msg, std::string filepath);
 
         void do_merge();
-        void do_sync(const SortedChangeSet &target_changes);
+        void do_sync();
+
+        void wait_for_state(State target_state);
 
         // Cross-thread state
         std::mutex state_lock; // Used for all non-constant members.
@@ -49,7 +51,9 @@ namespace fmerge {
         std::string path;
         std::atomic<State> state;
         std::vector<Change> peer_changes;
+        // Each operation also has changes associated with it
         SortedOperationSet pending_operations;
+        SortedChangeSet pending_changes;
 
         std::thread listener_thread_handle;
     };

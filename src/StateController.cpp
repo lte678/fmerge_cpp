@@ -15,9 +15,18 @@ namespace fmerge {
 
         c->send_request(std::make_shared<protocol::VersionRequest>(), [this](auto msg) { handle_version_response(msg); });
 
-        while(true) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
+        wait_for_state(State::SendTree);
+        std::cout << "Requesting file tree" << std::endl;
+        c->send_request(std::make_shared<protocol::ChangesRequest>(), [this](auto msg) { handle_changes_response(msg); });
+
+        wait_for_state(State::ResolvingConflicts);
+        do_merge();
+
+        wait_for_state(State::SyncingFiles);
+        do_sync();
+
+        std::cout << "Waiting for peer to complete" << std::endl;
+        wait_for_state(State::Finished);
     }
 
 
@@ -55,12 +64,7 @@ namespace fmerge {
             return;
         }
 
-        if(state == State::AwaitingVersion) {
-            state = State::SendTree;
-
-            std::cout << "Requesting file tree" << std::endl;
-            c->send_request(std::make_shared<protocol::ChangesRequest>(), [this](auto msg) { handle_changes_response(msg); });
-        }
+        if(state == State::AwaitingVersion) state = State::SendTree;            
     }
 
 
@@ -77,10 +81,7 @@ namespace fmerge {
             std::cout << "Received " << peer_changes.size() << " changes from peer" << std::endl;
             state_lock.unlock();
 
-            do_merge();
-
-            std::cout << "Waiting for peer to complete" << std::endl;
-            //exit(0);
+            state = State::ResolvingConflicts;
         }
     }
 
@@ -130,7 +131,7 @@ namespace fmerge {
             auto path_tokens = split_path(fullpath);
             auto file_folder = join_path("/", path_to_str(std::vector<std::string>(path_tokens.begin(), path_tokens.end() - 1)));
             if(!exists(file_folder)) {
-                std::cout << "[Warning] Out of order file transfer. Creating folder for file that should already exist." << std::endl;
+                //std::cout << "[Warning] Out of order file transfer. Creating folder for file that should already exist." << std::endl;
                 if(ensure_dir(file_folder)) {
                     std::cerr << "[Error] Failed to create directory " << file_folder << std::endl;
                 }
@@ -165,19 +166,22 @@ namespace fmerge {
             }
             // TODO: Create user interface for conflict resolutions
         } else {
+            state_lock.lock();
             pending_operations = operations;
+            pending_changes = merged_sorted_changes;
+            state_lock.unlock();
             //print_sorted_changes(merged_sorted_changes);
             std::cout << "Pending operations:" << std::endl;
-            print_sorted_operations(pending_operations);
+            print_sorted_operations(operations);
             state = SyncingFiles;
-
-            do_sync(merged_sorted_changes);
         }
     }
 
-    void StateController::do_sync(const SortedChangeSet &target_changes) {
+    void StateController::do_sync() {
         // Contains the changes that have been committed to disk
         SortedChangeSet processed_changes{};
+        // This is probably too strict of a lock
+        state_lock.lock();
         for(const auto& file_ops : pending_operations) {
             // For us to accurately reproduce the new file history, all operations
             // have to be executed successfully. If this fails, we will have to resolve it
@@ -204,8 +208,15 @@ namespace fmerge {
             }
             if(all_successfull) {
                 // file_ops.first = path
-                processed_changes.emplace(file_ops.first, target_changes.at(file_ops.first));
+                processed_changes.emplace(file_ops.first, pending_changes.at(file_ops.first));
             }
+        }
+        state_lock.unlock();
+    }
+
+    void StateController::wait_for_state(State target_state) {
+        while(target_state != state) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
     }
 }

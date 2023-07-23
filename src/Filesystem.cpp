@@ -26,7 +26,7 @@ namespace fmerge {
             stats.type = FileType::Unknown;
         }
         stats.fsize = clib_stats.st_size;
-        
+
         return optional<FileStats>{stats};
     }
 
@@ -49,6 +49,13 @@ namespace fmerge {
     int ensure_dir(std::string path) {
         // Create dir if it does not exist
         if(!get_file_stats(path).has_value()) {
+            // Make sure parent directory exists
+            auto tokens = split_path(path);
+            std::vector<std::string> parent_dir(tokens.begin(), tokens.end() - 1);
+            if(ensure_dir(path_to_str(parent_dir))) {
+                return 1;
+            }
+
             if(mkdir(path.c_str(), S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) == -1) {
                 print_clib_error("mkdir");
                 return 1;
@@ -83,6 +90,8 @@ namespace fmerge {
         while ((pos = path.find("/", last)) != std::string::npos) {
             if(pos - last > 0) {
                 ret.push_back(path.substr(last, pos - last));
+            } else if((pos - last) == 0 && (last == 0)) {
+                ret.push_back("/");
             }
             last = pos + 1;
         }
@@ -95,7 +104,9 @@ namespace fmerge {
 
     std::string join_path(std::string p1, std::string p2) {
         if(!p1.empty()) {
-            if(*(p1.end()) == '/') {
+            if(*(p1.end()) == '/' && *(p2.begin()) == '/') {
+                return p1 + std::string(p2.begin() + 1, p2.end());
+            } else if(*(p1.end()) == '/' || *(p2.begin()) == '/') {
                 return p1 + p2;
             } else {
                 return p1 + "/" + p2;
@@ -108,15 +119,9 @@ namespace fmerge {
 
 
     std::string path_to_str(std::vector<std::string> tokens) {
-        if(tokens.size() == 0) {
-            return "";
-        }
-
-        std::string res = tokens.front();
-        for(auto token = tokens.begin() + 1;
-            token != tokens.end();
-            token++) {
-            res += "/" + *token;
+        std::string res{};
+        for(auto token : tokens) {
+            res = join_path(res, token);
         }
         return res;
     }
