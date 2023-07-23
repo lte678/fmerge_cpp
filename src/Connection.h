@@ -20,7 +20,7 @@ namespace fmerge {
         Connection(int _fd, std::string _address) : fd(_fd), address(_address) {}
     
         typedef std::function<void(std::shared_ptr<protocol::Message>)> ResponseCallback;
-        typedef std::function<std::shared_ptr<protocol::Message>(protocol::MessageType)> RequestCallback;
+        typedef std::function<std::shared_ptr<protocol::Message>(std::shared_ptr<protocol::Message>)> RequestCallback;
     private:
         int fd;
         std::mutex transmit_lock;
@@ -35,7 +35,7 @@ namespace fmerge {
         std::mutex response_lock;
         std::vector<PendingResponse> pending_responses;
     public:
-        void send_request(protocol::MessageType request_type, ResponseCallback response_callback);
+        void send_request(std::shared_ptr<protocol::Message> req , ResponseCallback response_callback);
         void listen(RequestCallback request_callback);
 
         // Blocking receive that is guaranteed to return the requested number of bytes
@@ -49,19 +49,14 @@ namespace fmerge {
 
     struct MessageHeader {
         MessageHeader() = delete;
-        MessageHeader(protocol::MessageType _type, unsigned long _length, transmission_idx _index, bool _is_response)
-            : type(_type), length(_length), index(_index), is_response(_is_response) {};
+        MessageHeader(protocol::MessageType _raw_type, unsigned long _length, transmission_idx _index)
+            : raw_type(_raw_type), length(_length), index(_index) {};
         MessageHeader(std::shared_ptr<protocol::Message> msg, transmission_idx _index)
-            : type(msg->type()), length(msg->length()), index(_index), is_response(true) {};
-        
-        static MessageHeader make_request_header(protocol::MessageType _type, transmission_idx _index) {
-            return MessageHeader(_type, 0, _index, false);
-        }
+            : raw_type(msg->raw_type()), length(msg->length()), index(_index) {};
 
-        protocol::MessageType type{};
+        protocol::MessageType raw_type{};
         unsigned long length{};
         transmission_idx index{};
-        bool is_response{};
 
         void serialize(int fd) const;
         static MessageHeader deserialize(protocol::ReadFunc receive);

@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <time.h>
 #include <dirent.h>
+#include <unistd.h>
 #include <cstdlib>
 #include <string>
 #include <optional>
@@ -34,6 +35,7 @@ namespace fmerge {
 
     optional<FileStats> get_file_stats(std::string filepath);
     bool exists(std::string filepath);
+    bool remove_path(std::string path);
     int ensure_dir(std::string path);
     long get_timestamp_now();
 

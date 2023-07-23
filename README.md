@@ -23,9 +23,8 @@ The software should in theory yield identical results both ways around.
 
 ## Current Status
 
-Currently, the software can construct a filetree in memory, save it to disk, create and maintain file modification logs and connect to another instance.
-
-It does not support any syncing of changes, or transfer of files yet.
+Currently, the software can detect and maintain changes that occur in the specified directory and merge these changes from a peer.
+There are no smart merging algorithms yet and the software does not perform any of the calculated changes. 
 
 ## Author
 Me!

@@ -36,6 +36,15 @@ namespace fmerge {
     }
 
 
+    bool remove_path(std::string path) {
+        if(remove(path.c_str()) == -1) {
+            print_clib_error("remove");
+            return false;
+        }
+        return true;
+    }
+
+
     int ensure_dir(std::string path) {
         // Create dir if it does not exist
         if(!get_file_stats(path).has_value()) {
