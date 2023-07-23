@@ -13,6 +13,7 @@ namespace fmerge {
     enum class FileOperationType {
         Transfer,
         Delete,
+        CreateFolder,
         // We cannot revert files, since their historical variants don't exist.
         // This is still required as the anti-operation that is applied to modications that will
         // be overwritten. In theory it should always become optimized away after we simplify the

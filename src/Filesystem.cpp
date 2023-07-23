@@ -25,7 +25,8 @@ namespace fmerge {
         } else {
             stats.type = FileType::Unknown;
         }
-
+        stats.fsize = clib_stats.st_size;
+        
         return optional<FileStats>{stats};
     }
 

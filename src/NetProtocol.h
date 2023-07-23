@@ -12,11 +12,12 @@ namespace fmerge::protocol {
     // Warning: last bit is reserved for the request/response flag
     typedef unsigned short MessageType;
     
-    constexpr MessageType MsgIgnore = 1;
-    constexpr MessageType MsgVersion = 2;
-    constexpr MessageType MsgChanges = 3;
-    constexpr MessageType MsgUnknown = 5;
-    constexpr MessageType MsgRequestFlag = 0x8000;
+    constexpr MessageType MsgIgnore       = 1;
+    constexpr MessageType MsgVersion      = 2;
+    constexpr MessageType MsgChanges      = 3;
+    constexpr MessageType MsgFileTransfer = 4;
+    constexpr MessageType MsgUnknown      = 5;
+    constexpr MessageType MsgRequestFlag  = 0x8000;
 
     std::string msg_type_to_string(const MessageType msg);
 
@@ -35,7 +36,7 @@ namespace fmerge::protocol {
     typedef std::function<void(void*,size_t)> ReadFunc;
 
 
-    struct EmptyRequest : public Message{
+    struct EmptyRequest : public Message {
         // A request that does not require any extra parameters, such as a VersionRequest or ChangesRequest.
         void serialize(int) const override {};
         unsigned long length() const override { return 0; };
@@ -52,6 +53,18 @@ namespace fmerge::protocol {
     };
 
 
+    struct FileTransferRequest : public Message {
+        FileTransferRequest(std::string _filepath) : filepath(_filepath) {};
+
+        std::string filepath;
+
+        void serialize(int fd) const override;
+        static FileTransferRequest deserialize(ReadFunc receive, unsigned long length);
+
+        MessageType raw_type() const override { return MsgRequestFlag | MsgFileTransfer; };
+        unsigned long length() const override { return filepath.length(); };
+    };
+
     struct VersionResponse : public Message {
         VersionResponse(int _major, int _minor, std::array<unsigned char, 16> _uuid) : major(_major), minor(_minor), uuid(_uuid) {};
 
@@ -67,7 +80,7 @@ namespace fmerge::protocol {
     };
 
 
-    struct ChangesResponse  : public Message {
+    struct ChangesResponse : public Message {
         // Transmit all the changes that the connection partner has not yet received.
         // The server decides which information is missing, since this index must be
         // maintained locally, in accordance with any changes that happen.
@@ -81,6 +94,23 @@ namespace fmerge::protocol {
 
         inline MessageType raw_type() const { return MsgChanges; };
         inline unsigned long length() const { return serialized_changes.length(); };
+    };
+
+
+    struct FileTransferResponse : public Message {
+        FileTransferResponse() = delete;
+        FileTransferResponse(std::shared_ptr<unsigned char> _payload, unsigned long _payload_len, char _is_folder) : payload(_payload), payload_len(_payload_len), is_folder(_is_folder) {};
+
+        std::shared_ptr<unsigned char> payload;
+        unsigned long payload_len;
+        char is_folder;
+
+        void serialize(int fd) const override;
+        static FileTransferResponse deserialize(ReadFunc receive, unsigned long length);
+
+        inline MessageType raw_type() const { return MsgFileTransfer; };
+        // One extra byte for the is_folder flag
+        inline unsigned long length() const { return payload_len + 1; };
     };
 
 

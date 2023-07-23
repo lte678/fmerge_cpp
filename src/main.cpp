@@ -21,6 +21,11 @@
 using namespace fmerge;
 
 
+namespace fmerge {
+    bool debug_protocol{false};
+}
+
+
 int server_mode(std::string path) {
     std::cout << "Starting in server mode for \"" << path << "\"" << std::endl;
 
@@ -101,7 +106,7 @@ int main(int argc, char* argv[]) {
     std::string target_address{};
     std::string path_opt{};
 
-    while((opt = getopt_long(argc, argv, "sc:v", long_options, &long_option_index)) != -1) {
+    while((opt = getopt_long(argc, argv, "sc:vd", long_options, &long_option_index)) != -1) {
         if(opt == 's') {
             if(mode != -1) {
                 std::cerr << "Cannot set multiple server and/or client flags." << std::endl;
@@ -118,6 +123,8 @@ int main(int argc, char* argv[]) {
         } else if(opt == 'v') {
             std::cout << "Version " << MAJOR_VERSION << "." << MINOR_VERSION << std::endl;
             return 0;
+        } else if(opt == 'd') {
+            debug_protocol = true;
         } else if(opt == '?') {
             // We got an invalid option
             if(optopt == 'c') {

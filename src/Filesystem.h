@@ -31,6 +31,7 @@ namespace fmerge {
     struct FileStats {
         long mtime;
         FileType type;
+        unsigned long fsize;
     };
 
     optional<FileStats> get_file_stats(std::string filepath);

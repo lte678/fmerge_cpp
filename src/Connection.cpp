@@ -54,9 +54,12 @@ namespace fmerge {
         pending_responses.push_back({.index = current_index, .type = req->type(), .callback = response_callback});
         // Now send header-only request message
         MessageHeader(req, current_index).serialize(fd);
+        req->serialize(fd);
         transmit_lock.unlock();
         response_lock.unlock();
-        std::cout << "[Peer <- Local] Request " << protocol::msg_type_to_string(req->raw_type()) << std::endl;
+        if(debug_protocol) {
+            std::cout << "[Peer <- Local] Request " << protocol::msg_type_to_string(req->raw_type()) << std::endl;
+        }
     }
 
 
@@ -72,12 +75,16 @@ namespace fmerge {
                 auto received_packet = protocol::deserialize_packet(received_header.raw_type, received_header.length, receive_func);
 
                 if(received_packet->is_request()) {
-                    std::cout << "[Peer -> Local] Request " << protocol::msg_type_to_string(received_header.raw_type) << std::endl;
+                    if(debug_protocol) {
+                        std::cout << "[Peer -> Local] Request " << protocol::msg_type_to_string(received_header.raw_type) << std::endl;
+                    }
                     // Request message from peer
                     auto response = request_callback(received_packet);
                     if(response) {
                         // Send back the response
-                        std::cout << "[Peer <- Local] Response " << protocol::msg_type_to_string(response->raw_type()) << std::endl;
+                        if(debug_protocol) {
+                            std::cout << "[Peer <- Local] Response " << protocol::msg_type_to_string(response->raw_type()) << std::endl;
+                        }
                         transmit_lock.lock();
                         MessageHeader(response, received_header.index).serialize(fd);
                         response->serialize(fd);
@@ -86,7 +93,9 @@ namespace fmerge {
                         std::cerr << "Error: Cannot send response for " << protocol::msg_type_to_string(received_header.raw_type) << " request" << std::endl;
                     }
                 } else {
-                    std::cout << "[Peer -> Local] Response " << protocol::msg_type_to_string(received_header.raw_type) << std::endl;
+                    if(debug_protocol) {
+                        std::cout << "[Peer -> Local] Response " << protocol::msg_type_to_string(received_header.raw_type) << std::endl;
+                    }
                     // Response message from peer
                     // Find the callback within the pending responses.
                     response_lock.lock();

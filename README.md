@@ -24,7 +24,9 @@ The software should in theory yield identical results both ways around.
 ## Current Status
 
 Currently, the software can detect and maintain changes that occur in the specified directory and merge these changes from a peer.
-There are no smart merging algorithms yet and the software does not perform any of the calculated changes. 
+Any special file support (large files, links, etc.) or handling of edge cases will fail.
+
+There are no smart merging algorithms yet.
 
 ## Author
 Me!

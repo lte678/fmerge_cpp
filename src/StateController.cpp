@@ -23,16 +23,18 @@ namespace fmerge {
 
     std::shared_ptr<protocol::Message> StateController::handle_request(std::shared_ptr<protocol::Message> msg) {
         if(msg->type() == protocol::MsgVersion) {
-            return handle_version_request();
+            return handle_version_request(msg);
         } else if(msg->type() == protocol::MsgChanges) {
-            return handle_changes_request();
+            return handle_changes_request(msg);
+        } else if(msg->type() == protocol::MsgFileTransfer) {
+            return handle_file_transfer_request(msg);
         }
         // Error message is handled caller function
         return nullptr;
     }
 
 
-    std::shared_ptr<protocol::Message> StateController::handle_version_request() {
+    std::shared_ptr<protocol::Message> StateController::handle_version_request(std::shared_ptr<protocol::Message>) {
         std::array<unsigned char, 16> uuid{};
         std::string our_uuid = config.value("uuid", "");
         if(uuid_parse(our_uuid.c_str(), uuid.data()) == -1) {
@@ -62,7 +64,7 @@ namespace fmerge {
     }
 
 
-    std::shared_ptr<protocol::Message> StateController::handle_changes_request() {
+    std::shared_ptr<protocol::Message> StateController::handle_changes_request(std::shared_ptr<protocol::Message>) {
         return std::make_shared<protocol::ChangesResponse>(read_changes(path));
     }
 
@@ -77,7 +79,69 @@ namespace fmerge {
 
             do_merge();
 
-            exit(0);
+            std::cout << "Waiting for peer to complete" << std::endl;
+            //exit(0);
+        }
+    }
+
+
+    std::shared_ptr<protocol::Message> StateController::handle_file_transfer_request(std::shared_ptr<protocol::Message> msg) {
+        auto ft_msg = std::static_pointer_cast<protocol::FileTransferRequest>(msg);
+        
+        std::string file_fullpath = join_path(path, ft_msg->filepath);
+
+        auto fstats = get_file_stats(file_fullpath);
+        if(!fstats.has_value()) {
+            std::cerr << "[Error] Peer requested a file that does not exist! (" << ft_msg->filepath << ")" << std::endl;
+            return std::make_shared<protocol::FileTransferResponse>(nullptr, 0, 0);
+        }
+        bool is_dir = fstats->type == FileType::Directory;
+
+        if(is_dir) {
+            // Return an empty response. The host does not require any extra data to create a folder.
+            return std::make_shared<protocol::FileTransferResponse>(nullptr, 0, is_dir);
+        }
+
+        std::ifstream filestream(file_fullpath, std::ifstream::binary);
+        std::shared_ptr<unsigned char> file_buffer((unsigned char*)malloc(fstats->fsize), free);
+        if(file_buffer == nullptr) {
+            std::cerr << "[Error] Reached memory allocation limit for file " << ft_msg->filepath << std::endl;
+            return std::make_shared<protocol::FileTransferResponse>(nullptr, 0, 0);
+        }
+        filestream.read(reinterpret_cast<char*>(file_buffer.get()), fstats->fsize);
+        if(!filestream) {
+            std::cerr << "[Error] Failed to read data for " << ft_msg->filepath << std::endl;
+        }
+        return std::make_shared<protocol::FileTransferResponse>(file_buffer, fstats->fsize, is_dir);
+    }
+
+
+    void StateController::handle_file_transfer_response(std::shared_ptr<protocol::Message> msg, std::string filepath) {
+        auto ft_msg = std::static_pointer_cast<protocol::FileTransferResponse>(msg);
+        std::cout << "Received " << filepath << " from peer (" << ft_msg->payload_len << " bytes) " << std::endl;
+
+        std::string fullpath = join_path(path, filepath);
+
+        if(ft_msg->is_folder) {
+            // Create folder
+            ensure_dir(fullpath);
+        } else {
+            // Create folder for file
+            auto path_tokens = split_path(fullpath);
+            auto file_folder = join_path("/", path_to_str(std::vector<std::string>(path_tokens.begin(), path_tokens.end() - 1)));
+            if(!exists(file_folder)) {
+                std::cout << "[Warning] Out of order file transfer. Creating folder for file that should already exist." << std::endl;
+                if(ensure_dir(file_folder)) {
+                    std::cerr << "[Error] Failed to create directory " << file_folder << std::endl;
+                }
+            }
+            // Create file
+            std::ofstream out_file(fullpath, std::ofstream::binary);
+            if(out_file) {
+                out_file.write(reinterpret_cast<char*>(ft_msg->payload.get()), ft_msg->payload_len);
+            } else {
+                std::cerr << "[Error] Could not open file " << fullpath << " for writing." << std::endl;
+            }
         }
     }
 
@@ -121,15 +185,18 @@ namespace fmerge {
             // the next database rebuild and merge. 
             bool all_successfull{true};
             for(const auto& op : file_ops.second) {
+                std::string filepath{op.path};
                 if(op.type == FileOperationType::Delete) {
-                    if(remove_path(join_path(path, op.path))) {
+                    if(remove_path(join_path(path, filepath))) {
                         // Removal succeeded
                     } else {
                         all_successfull = false;
                     }
                 } else if(op.type == FileOperationType::Transfer) {
-                    //c->send_request(protocol::MsgFileTransfer, [this](auto msg) { handle_version_response(msg); });
-                    std::cout << "TODO: Transfer" << std::endl;
+                    c->send_request(
+                        std::make_shared<protocol::FileTransferRequest>(filepath),
+                        [this, filepath](auto msg) { handle_file_transfer_response(msg, filepath); }
+                    );
                 } else {
                     std::cerr << "[Error] Could not perform unknown file operation " << op.type << std::endl;
                     all_successfull = false;
