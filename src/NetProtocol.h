@@ -99,11 +99,11 @@ namespace fmerge::protocol {
 
     struct FileTransferResponse : public Message {
         FileTransferResponse() = delete;
-        FileTransferResponse(std::shared_ptr<unsigned char> _payload, unsigned long _payload_len, char _is_folder) : payload(_payload), payload_len(_payload_len), is_folder(_is_folder) {};
+        FileTransferResponse(std::shared_ptr<unsigned char> _payload, unsigned long _payload_len, FileType _ftype) : payload(_payload), payload_len(_payload_len), ftype(_ftype) {};
 
         std::shared_ptr<unsigned char> payload;
         unsigned long payload_len;
-        char is_folder;
+        FileType ftype;
 
         void serialize(int fd) const override;
         static FileTransferResponse deserialize(ReadFunc receive, unsigned long length);

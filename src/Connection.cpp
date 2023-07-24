@@ -71,8 +71,14 @@ namespace fmerge {
 
 
     void Connection::join_finished_workers() {
-        for(auto &t : resp_handler_workers) {
-            if(t.joinable()) t.join();
+        auto worker_it = resp_handler_workers.begin();
+        while(worker_it != resp_handler_workers.end()) {
+            if(worker_it->joinable()) {
+                worker_it->join();
+                worker_it = resp_handler_workers.erase(worker_it);
+            } else {
+                worker_it++;
+            }
         }
     }
 

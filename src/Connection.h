@@ -6,6 +6,8 @@
 #include <functional>
 #include <atomic>
 #include <mutex>
+#include <vector>
+#include <list>
 #include <thread>
 
 
@@ -43,7 +45,7 @@ namespace fmerge {
         struct PendingResponse { transmission_idx index; protocol::MessageType type; ResponseCallback callback; };
 
         std::mutex response_lock;
-        std::vector<PendingResponse> pending_responses;
+        std::list<PendingResponse> pending_responses;
     public:
         void send_request(std::shared_ptr<protocol::Message> req , ResponseCallback response_callback);
         void listen(RequestCallback request_callback);

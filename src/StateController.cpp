@@ -1,6 +1,7 @@
 #include "StateController.h"
 
 #include "NetProtocol.h"
+#include "Errors.h"
 #include "Version.h"
 #include "Terminal.h"
 
@@ -94,48 +95,61 @@ namespace fmerge {
         auto fstats = get_file_stats(file_fullpath);
         if(!fstats.has_value()) {
             std::cerr << "[Error] Peer requested a file that does not exist! (" << ft_msg->filepath << ")" << std::endl;
-            return std::make_shared<protocol::FileTransferResponse>(nullptr, 0, 0);
+            return std::make_shared<protocol::FileTransferResponse>(nullptr, 0, FileType::Unknown);
         }
-        bool is_dir = fstats->type == FileType::Directory;
 
-        if(is_dir) {
+        if(fstats->type == FileType::Directory) {
             // Return an empty response. The host does not require any extra data to create a folder.
-            return std::make_shared<protocol::FileTransferResponse>(nullptr, 0, is_dir);
+            return std::make_shared<protocol::FileTransferResponse>(nullptr, 0, FileType::Directory);
+        } else if(fstats->type == FileType::File) {
+            std::ifstream filestream(file_fullpath, std::ifstream::binary);
+            std::shared_ptr<unsigned char> file_buffer((unsigned char*)malloc(fstats->fsize), free);
+            if(file_buffer == nullptr) {
+                std::cerr << "[Error] Reached memory allocation limit for file " << ft_msg->filepath << std::endl;
+                return std::make_shared<protocol::FileTransferResponse>(nullptr, 0, FileType::Unknown);
+            }
+            filestream.read(reinterpret_cast<char*>(file_buffer.get()), fstats->fsize);
+            if(!filestream) {
+                std::cerr << "[Error] Failed to read data for " << ft_msg->filepath << std::endl;
+            }
+            return std::make_shared<protocol::FileTransferResponse>(file_buffer, fstats->fsize, FileType::File);
+        } else if(fstats->type == FileType::Link) {
+            std::shared_ptr<unsigned char> link_buffer((unsigned char*)malloc(fstats->fsize + 1), free);
+            if(readlink(file_fullpath.c_str(), reinterpret_cast<char*>(link_buffer.get()), fstats->fsize) == -1) {
+                print_clib_error("readlink");
+                return std::make_shared<protocol::FileTransferResponse>(nullptr, 0, FileType::Unknown);
+            }
+            // Null terminate string
+            link_buffer.get()[fstats->fsize] = 0;
+            return std::make_shared<protocol::FileTransferResponse>(link_buffer, fstats->fsize + 1, FileType::Link);
+        } else {
+            std::cerr << "[Error] Failed to process unidentifiable item at path '" << file_fullpath << "'." << std::endl;
+            return std::make_shared<protocol::FileTransferResponse>(nullptr, 0, FileType::Unknown);
         }
-
-        std::ifstream filestream(file_fullpath, std::ifstream::binary);
-        std::shared_ptr<unsigned char> file_buffer((unsigned char*)malloc(fstats->fsize), free);
-        if(file_buffer == nullptr) {
-            std::cerr << "[Error] Reached memory allocation limit for file " << ft_msg->filepath << std::endl;
-            return std::make_shared<protocol::FileTransferResponse>(nullptr, 0, 0);
-        }
-        filestream.read(reinterpret_cast<char*>(file_buffer.get()), fstats->fsize);
-        if(!filestream) {
-            std::cerr << "[Error] Failed to read data for " << ft_msg->filepath << std::endl;
-        }
-        return std::make_shared<protocol::FileTransferResponse>(file_buffer, fstats->fsize, is_dir);
     }
 
 
     void StateController::handle_file_transfer_response(std::shared_ptr<protocol::Message> msg, std::string filepath) {
         auto ft_msg = std::static_pointer_cast<protocol::FileTransferResponse>(msg);
-        std::cout << "Received " << filepath << " from peer (" << ft_msg->payload_len << " bytes) " << std::endl;
+        //std::cout << "Received " << filepath << " from peer (" << ft_msg->payload_len << " bytes) " << std::endl;
 
         std::string fullpath = join_path(path, filepath);
 
-        if(ft_msg->is_folder) {
+        // Create folder for file
+        auto path_tokens = split_path(fullpath);
+        auto file_folder = join_path("/", path_to_str(std::vector<std::string>(path_tokens.begin(), path_tokens.end() - 1)));
+        if(!exists(file_folder)) {
+            //std::cout << "[Warning] Out of order file transfer. Creating folder for file that should already exist." << std::endl;
+            if(ensure_dir(file_folder)) {
+                std::cerr << "[Error] Failed to create directory " << file_folder << std::endl;
+                return;
+            }
+        }
+
+        if(ft_msg->ftype == FileType::Directory) {
             // Create folder
             ensure_dir(fullpath);
-        } else {
-            // Create folder for file
-            auto path_tokens = split_path(fullpath);
-            auto file_folder = join_path("/", path_to_str(std::vector<std::string>(path_tokens.begin(), path_tokens.end() - 1)));
-            if(!exists(file_folder)) {
-                //std::cout << "[Warning] Out of order file transfer. Creating folder for file that should already exist." << std::endl;
-                if(ensure_dir(file_folder)) {
-                    std::cerr << "[Error] Failed to create directory " << file_folder << std::endl;
-                }
-            }
+        } else if(ft_msg->ftype == FileType::File) {
             // Create file
             std::ofstream out_file(fullpath, std::ofstream::binary);
             if(out_file) {
@@ -143,6 +157,13 @@ namespace fmerge {
             } else {
                 std::cerr << "[Error] Could not open file " << fullpath << " for writing." << std::endl;
             }
+        } else if(ft_msg->ftype == FileType::Link) {
+            // Create symlink
+            if(symlink(reinterpret_cast<char*>(ft_msg->payload.get()), fullpath.c_str()) == -1) {
+                print_clib_error("symlink");
+            }
+        } else {
+            std::cerr << "[Error] Received unknown file type in FileTransfer response! (" << static_cast<int>(ft_msg->ftype) << ")" << std::endl;
         }
     }
 

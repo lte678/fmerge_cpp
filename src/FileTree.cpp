@@ -254,7 +254,7 @@ namespace fmerge {
                         // Update the metadata to match what is actually on disk
                         existing_file->metadata->mtime = stats.mtime;
                     }
-                } else if(stats.type == FileType::File) {
+                } else if(stats.type == FileType::File || stats.type == FileType::Link) {
                     auto existing_file = parent_node->get_child_file(path_tokens.back());
                     if(!existing_file) {
                         parent_node->files.push_back(
@@ -264,6 +264,8 @@ namespace fmerge {
                         // Update the metadata to match what is actually on disk
                         existing_file->mtime = stats.mtime;
                     }
+                } else {
+                    std::cerr << "[Error] " << path << ": Unknown file type (" << static_cast<int>(stats.type) << std::endl;
                 }
             }
         );
