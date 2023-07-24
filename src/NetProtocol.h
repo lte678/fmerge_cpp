@@ -98,19 +98,30 @@ namespace fmerge::protocol {
 
 
     struct FileTransferResponse : public Message {
-        FileTransferResponse() = delete;
-        FileTransferResponse(std::shared_ptr<unsigned char> _payload, unsigned long _payload_len, FileType _ftype) : payload(_payload), payload_len(_payload_len), ftype(_ftype) {};
+        FileTransferResponse()
+            : payload(nullptr), payload_len(0), ftype(FileType::Unknown),
+            modification_time(0), access_time(0) {};
+        FileTransferResponse(std::shared_ptr<unsigned char> _payload, unsigned long _payload_len, FileType _ftype, long _mtime, long _ctime) 
+            : payload(_payload), payload_len(_payload_len), ftype(_ftype),
+            modification_time(_mtime), access_time(_ctime) {};
+        FileTransferResponse(std::shared_ptr<unsigned char> _payload, unsigned long _payload_len, FileStats _stats) 
+            : payload(_payload), payload_len(_payload_len), ftype(_stats.type),
+            modification_time(_stats.mtime), access_time(_stats.atime) {};
 
         std::shared_ptr<unsigned char> payload;
         unsigned long payload_len;
         FileType ftype;
+        long modification_time;
+        long access_time;
 
         void serialize(int fd) const override;
         static FileTransferResponse deserialize(ReadFunc receive, unsigned long length);
 
         inline MessageType raw_type() const { return MsgFileTransfer; };
         // One extra byte for the is_folder flag
-        inline unsigned long length() const { return payload_len + 1; };
+        inline unsigned long length() const { 
+            return payload_len + sizeof(unsigned char) + sizeof(modification_time) + sizeof(access_time); 
+        };
     };
 
 

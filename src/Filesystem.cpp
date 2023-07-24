@@ -2,6 +2,8 @@
 
 #include "Errors.h"
 
+#include <fcntl.h>
+
 
 namespace fmerge {
 
@@ -16,6 +18,8 @@ namespace fmerge {
         }
         // Populate with the read metadata
         stats.mtime = clib_stats.st_mtime;
+        stats.ctime = clib_stats.st_ctime;
+        stats.atime = clib_stats.st_atime;
         if(S_ISDIR(clib_stats.st_mode)) {
             stats.type = FileType::Directory;
         } else if(S_ISREG(clib_stats.st_mode)) {
@@ -30,6 +34,18 @@ namespace fmerge {
         return optional<FileStats>{stats};
     }
 
+
+    bool set_timestamp(std::string filepath, long mod_time, long access_time) {
+        timespec times[] = {
+            {.tv_sec = access_time, .tv_nsec = 0 },
+            {.tv_sec = mod_time, .tv_nsec = 0}
+        };
+        if(utimensat(AT_FDCWD, filepath.c_str(), times, AT_SYMLINK_NOFOLLOW) == -1) {
+            print_clib_error("utimensat");
+            return false;
+        }
+        return true;
+    }
 
     bool exists(std::string filepath) {
         Stat clib_stats;
@@ -46,23 +62,23 @@ namespace fmerge {
     }
 
 
-    int ensure_dir(std::string path) {
+    bool ensure_dir(std::string path) {
         // Create dir if it does not exist
         if(!get_file_stats(path).has_value()) {
             // Make sure parent directory exists
             auto tokens = split_path(path);
             std::vector<std::string> parent_dir(tokens.begin(), tokens.end() - 1);
-            if(ensure_dir(path_to_str(parent_dir))) {
-                return 1;
+            if(!ensure_dir(path_to_str(parent_dir))) {
+                return false;
             }
 
             if(mkdir(path.c_str(), S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) == -1) {
                 print_clib_error("mkdir");
-                return 1;
+                return false;
             }
             //std::cout << "Created " << split_path(path).back() << " directory" << std::endl;
         }
-        return 0;
+        return true;
     }
 
 

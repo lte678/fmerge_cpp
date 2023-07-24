@@ -93,8 +93,15 @@ namespace fmerge::protocol {
 
 
     void FileTransferResponse::serialize(int fd) const {
+        long mtime_le = htole64(modification_time);
+        write(fd, &mtime_le, sizeof(mtime_le));
+
+        long atime_le = htole64(access_time);
+        write(fd, &atime_le, sizeof(atime_le));
+
         auto ftype_char = static_cast<unsigned char>(ftype);
         write(fd, &ftype_char, sizeof(ftype_char));
+
         if(write(fd, payload.get(), payload_len) != static_cast<long int>(payload_len)) {
             std::cerr << "[Error] Failed to transfer all bytes of file transfer payload!" << std::endl;
         }
@@ -102,12 +109,21 @@ namespace fmerge::protocol {
 
 
     FileTransferResponse FileTransferResponse::deserialize(ReadFunc receive, unsigned long length) {
+        long mtime{};
+        receive(&mtime, sizeof(mtime));
+        mtime = le64toh(mtime);
+
+        long atime{};
+        receive(&atime, sizeof(atime));
+        atime = le64toh(atime);
+
         unsigned char ftype_char{};
         receive(&ftype_char, sizeof(ftype_char));
 
-        std::shared_ptr<unsigned char> resp_buffer{(unsigned char*)malloc(length), free};
-        receive(resp_buffer.get(), length - 1);
-        return FileTransferResponse(resp_buffer, length - 1, static_cast<FileType>(ftype_char));
+        unsigned long payload_len = length - sizeof(mtime) - sizeof(atime) - sizeof(ftype_char);
+        std::shared_ptr<unsigned char> resp_buffer{(unsigned char*)malloc(payload_len), free};
+        receive(resp_buffer.get(), payload_len);
+        return FileTransferResponse(resp_buffer, payload_len, static_cast<FileType>(ftype_char), mtime, atime);
     }
 
 

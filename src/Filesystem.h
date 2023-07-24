@@ -29,15 +29,18 @@ namespace fmerge {
 
 
     struct FileStats {
-        long mtime;
+        long mtime; // Modification time
+        long ctime; // Creation time
+        long atime; // Access time
         FileType type;
         unsigned long fsize;
     };
 
     optional<FileStats> get_file_stats(std::string filepath);
+    bool set_timestamp(std::string filepath, long mod_time, long access_time);
     bool exists(std::string filepath);
     bool remove_path(std::string path);
-    int ensure_dir(std::string path);
+    bool ensure_dir(std::string path);
     long get_timestamp_now();
 
     optional<std::string> abs_path(std::string basepath);

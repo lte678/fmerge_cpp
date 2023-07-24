@@ -95,36 +95,36 @@ namespace fmerge {
         auto fstats = get_file_stats(file_fullpath);
         if(!fstats.has_value()) {
             std::cerr << "[Error] Peer requested a file that does not exist! (" << ft_msg->filepath << ")" << std::endl;
-            return std::make_shared<protocol::FileTransferResponse>(nullptr, 0, FileType::Unknown);
+            return std::make_shared<protocol::FileTransferResponse>();
         }
 
         if(fstats->type == FileType::Directory) {
             // Return an empty response. The host does not require any extra data to create a folder.
-            return std::make_shared<protocol::FileTransferResponse>(nullptr, 0, FileType::Directory);
+            return std::make_shared<protocol::FileTransferResponse>(nullptr, 0, *fstats);
         } else if(fstats->type == FileType::File) {
             std::ifstream filestream(file_fullpath, std::ifstream::binary);
             std::shared_ptr<unsigned char> file_buffer((unsigned char*)malloc(fstats->fsize), free);
             if(file_buffer == nullptr) {
                 std::cerr << "[Error] Reached memory allocation limit for file " << ft_msg->filepath << std::endl;
-                return std::make_shared<protocol::FileTransferResponse>(nullptr, 0, FileType::Unknown);
+                return std::make_shared<protocol::FileTransferResponse>();
             }
             filestream.read(reinterpret_cast<char*>(file_buffer.get()), fstats->fsize);
             if(!filestream) {
                 std::cerr << "[Error] Failed to read data for " << ft_msg->filepath << std::endl;
             }
-            return std::make_shared<protocol::FileTransferResponse>(file_buffer, fstats->fsize, FileType::File);
+            return std::make_shared<protocol::FileTransferResponse>(file_buffer, fstats->fsize, *fstats);
         } else if(fstats->type == FileType::Link) {
             std::shared_ptr<unsigned char> link_buffer((unsigned char*)malloc(fstats->fsize + 1), free);
             if(readlink(file_fullpath.c_str(), reinterpret_cast<char*>(link_buffer.get()), fstats->fsize) == -1) {
                 print_clib_error("readlink");
-                return std::make_shared<protocol::FileTransferResponse>(nullptr, 0, FileType::Unknown);
+                return std::make_shared<protocol::FileTransferResponse>();
             }
             // Null terminate string
             link_buffer.get()[fstats->fsize] = 0;
-            return std::make_shared<protocol::FileTransferResponse>(link_buffer, fstats->fsize + 1, FileType::Link);
+            return std::make_shared<protocol::FileTransferResponse>(link_buffer, fstats->fsize + 1, *fstats);
         } else {
             std::cerr << "[Error] Failed to process unidentifiable item at path '" << file_fullpath << "'." << std::endl;
-            return std::make_shared<protocol::FileTransferResponse>(nullptr, 0, FileType::Unknown);
+            return std::make_shared<protocol::FileTransferResponse>();
         }
     }
 
@@ -140,7 +140,7 @@ namespace fmerge {
         auto file_folder = join_path("/", path_to_str(std::vector<std::string>(path_tokens.begin(), path_tokens.end() - 1)));
         if(!exists(file_folder)) {
             //std::cout << "[Warning] Out of order file transfer. Creating folder for file that should already exist." << std::endl;
-            if(ensure_dir(file_folder)) {
+            if(!ensure_dir(file_folder)) {
                 std::cerr << "[Error] Failed to create directory " << file_folder << std::endl;
                 return;
             }
@@ -148,7 +148,9 @@ namespace fmerge {
 
         if(ft_msg->ftype == FileType::Directory) {
             // Create folder
-            ensure_dir(fullpath);
+            if(!ensure_dir(fullpath)) {
+                return;
+            }
         } else if(ft_msg->ftype == FileType::File) {
             // Create file
             std::ofstream out_file(fullpath, std::ofstream::binary);
@@ -156,15 +158,21 @@ namespace fmerge {
                 out_file.write(reinterpret_cast<char*>(ft_msg->payload.get()), ft_msg->payload_len);
             } else {
                 std::cerr << "[Error] Could not open file " << fullpath << " for writing." << std::endl;
+                return;
             }
         } else if(ft_msg->ftype == FileType::Link) {
             // Create symlink
             if(symlink(reinterpret_cast<char*>(ft_msg->payload.get()), fullpath.c_str()) == -1) {
                 print_clib_error("symlink");
+                return;
             }
         } else {
             std::cerr << "[Error] Received unknown file type in FileTransfer response! (" << static_cast<int>(ft_msg->ftype) << ")" << std::endl;
+            return;
         }
+
+        // TODO: Return error codes
+        set_timestamp(fullpath, ft_msg->modification_time, ft_msg->access_time);
     }
 
 
