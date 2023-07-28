@@ -20,7 +20,7 @@ namespace fmerge {
                 std::cout << " ";
             }
         }
-        std::cout << "] " << trailing << " " << std::round(progress * 100.0f) << "%\r";
+        std::cout << "] " << trailing << " " << std::round(progress * 100.0f) << "%\r" << std::flush;
     }
 
     char prompt_choice(const std::string &options) {

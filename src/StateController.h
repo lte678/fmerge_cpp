@@ -51,6 +51,7 @@ namespace fmerge {
         std::string path;
         std::atomic<State> state;
         std::vector<Change> peer_changes;
+        SortedChangeSet sorted_local_changes;
         // Each operation also has changes associated with it
         SortedOperationSet pending_operations;
         SortedChangeSet pending_changes;

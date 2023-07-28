@@ -92,6 +92,7 @@ namespace fmerge {
     void serialize_changes(std::ostream& stream, std::vector<Change> changes, bool show_loading_bar = false);
     bool append_changes(std::string path, std::vector<Change> new_changes);
     std::vector<Change> read_changes(std::string base_dir);
+    void write_changes(std::string base_dir, std::vector<Change> changes);
 
     std::vector<Change> get_new_tree_changes(std::string path);
 

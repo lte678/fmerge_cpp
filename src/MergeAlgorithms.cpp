@@ -43,6 +43,15 @@ namespace fmerge {
     }
 
 
+    std::vector<Change> recombine_changes_by_file(SortedChangeSet changes) {
+        std::vector<Change> unsorted_set{};
+        for(const auto &change : changes) {
+            unsorted_set.insert(unsorted_set.end(), change.second.begin(), change.second.end());
+        }
+        return unsorted_set;
+    }
+
+
     std::tuple<SortedChangeSet, SortedOperationSet, std::vector<Conflict>>
         merge_change_sets(const SortedChangeSet& loc, const SortedChangeSet& rem, const std::unordered_map<std::string, ConflictResolution> &resolutions) {
         

@@ -24,6 +24,7 @@ namespace fmerge {
         do_merge();
 
         wait_for_state(State::SyncingFiles);
+        std::cout << "Performing file sync. This may take a while..." << std::endl;
         do_sync();
 
         std::cout << "Waiting for peer to complete" << std::endl;
@@ -180,14 +181,16 @@ namespace fmerge {
         state = ResolvingConflicts;
         state_lock.lock();
         auto sorted_peer_changes = sort_changes_by_file(peer_changes);
-        state_lock.unlock();
 
         print_sorted_changes(sorted_peer_changes);
 
         std::cout << "Merging..." << std::endl;
         // These start out empty by default
         std::unordered_map<std::string, ConflictResolution> resolutions{};
-        auto [merged_sorted_changes, operations, conflicts] = merge_change_sets(sort_changes_by_file(read_changes(path)), sorted_peer_changes, resolutions);
+        sorted_local_changes = sort_changes_by_file(read_changes(path));
+        auto [merged_sorted_changes, operations, conflicts] = merge_change_sets(sorted_local_changes, sorted_peer_changes, resolutions);
+        state_lock.unlock();
+
         if(conflicts.size() > 0) {
             std::cerr << "!!! Merge conflicts occured for the following paths:" << std::endl;
             for(const auto &conflict : conflicts) { 
@@ -208,10 +211,15 @@ namespace fmerge {
 
     void StateController::do_sync() {
         // Contains the changes that have been committed to disk
-        SortedChangeSet processed_changes{};
+        //std::vector<Change> processed_changes{};
+        unsigned long processed_change_count{0};
         // This is probably too strict of a lock
         state_lock.lock();
         for(const auto& file_ops : pending_operations) {
+            if(processed_change_count % 250 == 0) {
+                print_progress_bar(static_cast<float>(processed_change_count) / static_cast<float>(pending_operations.size()), "Syncing");
+            }
+            
             // For us to accurately reproduce the new file history, all operations
             // have to be executed successfully. If this fails, we will have to resolve it
             // or leave the file history in a dirty state, which will be corrected at
@@ -237,10 +245,19 @@ namespace fmerge {
             }
             if(all_successfull) {
                 // file_ops.first = path
-                processed_changes.emplace(file_ops.first, pending_changes.at(file_ops.first));
+                sorted_local_changes.insert_or_assign(file_ops.first, pending_changes.at(file_ops.first));
+            } else {
+                std::cerr << "[Error] File " << file_ops.first << " is in a conflicted state!" << std::endl;
             }
+            processed_change_count++;
         }
         state_lock.unlock();
+
+        print_progress_bar(1.0f, "Syncing");
+        std::cout << std::endl;
+
+        write_changes(path, recombine_changes_by_file(sorted_local_changes));
+        std::cout << "Saved changes to disk" << std::endl;
     }
 
     void StateController::wait_for_state(State target_state) {

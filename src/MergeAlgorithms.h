@@ -56,6 +56,10 @@ namespace fmerge {
     // Takes a list of changes and sorts them, so that each element of the unordered map
     // contains a list of changes only relevant to that specific file.
     SortedChangeSet sort_changes_by_file(std::vector<Change> changes);
+    // Takes a map containing changes for each file as the key and returns all the sublists
+    // as one merged change list. Preserves per-file change order. Does not preserve global
+    // order.
+    std::vector<Change> recombine_changes_by_file(SortedChangeSet changes);
 
     std::tuple<SortedChangeSet, SortedOperationSet, std::vector<Conflict>>
         merge_change_sets(const SortedChangeSet &loc, const SortedChangeSet &rem, const std::unordered_map<std::string, ConflictResolution> &resolutions);

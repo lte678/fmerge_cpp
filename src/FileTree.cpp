@@ -414,14 +414,11 @@ namespace fmerge {
 
 
     bool append_changes(std::string path, std::vector<Change> new_changes) {
-        std::string filechanges_file = join_path(path, ".fmerge/filechanges.db");
-        
         auto all_changes = read_changes(path);
         // Append new changes
         all_changes.insert(all_changes.end(), new_changes.begin(), new_changes.end());
         // Write new change log
-        std::ofstream serialized_changes(filechanges_file, std::ios_base::trunc); 
-        serialize_changes(serialized_changes, all_changes, true);
+        write_changes(path, all_changes);
         return 0;
     }
 
@@ -435,6 +432,13 @@ namespace fmerge {
             changes = deserialize_changes(changes_file);
         }
         return changes;
+    }
+
+
+    void write_changes(std::string base_dir, std::vector<Change> changes) {
+        std::string changes_path = join_path(base_dir, ".fmerge/filechanges.db");
+        std::ofstream changes_file(changes_path, std::ios_base::trunc);
+        serialize_changes(changes_file, changes, true);
     }
 
 
