@@ -84,7 +84,17 @@ namespace fmerge {
                     }
                 } else {
                     // The user has not specified a resolution
-                    conflicts.emplace_back(path);
+                    auto rem_file_changes = rem.at(path);
+                    bool conflict{false};
+                    for(size_t i = 0; i < file_changes.second.size(); i++) {
+                        if(i >= rem_file_changes.size()) {
+                            conflict = true;
+                        } else if(!(rem_file_changes[i] == file_changes.second[i])) {
+                            conflict = true;
+                        }
+                    }
+                    // The user has not specified a resolution and no automatic resolution was possible
+                    if(conflict) conflicts.emplace_back(path);
                 }
                 
             } else {

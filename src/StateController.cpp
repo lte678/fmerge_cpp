@@ -256,7 +256,8 @@ namespace fmerge {
         print_progress_bar(1.0f, "Syncing");
         std::cout << std::endl;
 
-        write_changes(path, recombine_changes_by_file(sorted_local_changes));
+        // This creates duplicates once we also update the filetree on-disk structure at the next execution
+        //write_changes(path, recombine_changes_by_file(sorted_local_changes));
         std::cout << "Saved changes to disk" << std::endl;
     }
 

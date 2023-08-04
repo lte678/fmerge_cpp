@@ -158,6 +158,23 @@ namespace fmerge {
     }
 
 
+    bool operator==(const Change& lhs, const Change& rhs) {
+        if(lhs.earliest_change_time != rhs.earliest_change_time) {
+            return false;
+        }
+        if(lhs.latest_change_time != rhs.latest_change_time) {
+            return false;
+        }
+        if(lhs.type != rhs.type) {
+            return false;
+        }
+        if(lhs.path != rhs.path) {
+            return false;
+        }
+        return true;
+    }
+
+
     std::ostream& operator<<(std::ostream& os, const Change& change) {
         os << std::setw(16) << std::left << change.type << change.path;
         return os;

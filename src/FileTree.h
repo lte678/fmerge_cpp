@@ -66,7 +66,6 @@ namespace fmerge {
 
     std::ostream& operator<<(std::ostream& os, ChangeType change_type);
 
-
     class Change {
     public:
         ChangeType type;
@@ -79,6 +78,7 @@ namespace fmerge {
         std::string path{};
     public:
         friend std::ostream& operator<<(std::ostream& os, const Change& change);
+        friend bool operator==(const Change& lhs, const Change& rhs);
 
         void serialize(std::ostream& stream) const;
         static Change deserialize(std::istream& stream);
