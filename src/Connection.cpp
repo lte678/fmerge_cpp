@@ -5,21 +5,22 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netdb.h>
 #include <unistd.h>
 
 
 namespace fmerge {
 
-    void MessageHeader::serialize(int fd) const {
+    void MessageHeader::serialize(protocol::WriteFunc write) const {
         unsigned short nettype = htole16(static_cast<unsigned short>(raw_type));
-        write(fd, &nettype, sizeof(nettype));
+        write(&nettype, sizeof(nettype));
 
         unsigned short netindex = htole16(static_cast<unsigned short>(index));
-        write(fd, &netindex, sizeof(netindex));
+        write(&netindex, sizeof(netindex));
 
         unsigned long netlength = htole64(static_cast<unsigned int>(length));
-        write(fd, &netlength, sizeof(netlength));
+        write(&netlength, sizeof(netlength));
     }
 
 
@@ -39,6 +40,13 @@ namespace fmerge {
         return MessageHeader(type, length, index);
     }
 
+
+    Connection::~Connection() {
+        disconnect = true;
+        if(listener_thread_handle.joinable()) {
+            listener_thread_handle.join();
+        }
+    }
 
     void Connection::send_request(std::shared_ptr<protocol::Message> req , ResponseCallback response_callback) {
         // This function is thread safe
@@ -60,8 +68,9 @@ namespace fmerge {
         pending_responses.push_back({.index = current_index, .type = req->type(), .callback = response_callback});
         resp_handler_worker_count++;
         // Now send header-only request message
-        MessageHeader(req, current_index).serialize(fd);
-        req->serialize(fd);
+        auto send_func = [this](auto buf, auto len) { send(buf, len); };
+        MessageHeader(req, current_index).serialize(send_func);
+        req->serialize(send_func);
         transmit_lock.unlock();
         response_lock.unlock();
         if(debug_protocol) {
@@ -80,12 +89,22 @@ namespace fmerge {
                 worker_it++;
             }
         }
+        worker_it = req_handler_workers.begin();
+        while(worker_it != req_handler_workers.end()) {
+            if(worker_it->joinable()) {
+                worker_it->join();
+                worker_it = req_handler_workers.erase(worker_it);
+            } else {
+                worker_it++;
+            }
+        }
     }
 
 
     void Connection::listen(RequestCallback request_callback) {
         listener_thread_handle = std::thread([=]() { listener_thread(request_callback); });
     }
+
 
     void Connection::listener_thread(RequestCallback request_callback) {
         // To prevent the application from locking up, this thread must always return back to a state of listening
@@ -112,10 +131,16 @@ namespace fmerge {
                         if(debug_protocol) {
                             std::cout << "[Peer <- Local] Response " << protocol::msg_type_to_string(response->raw_type()) << std::endl;
                         }
-                        transmit_lock.lock();
-                        MessageHeader(response, received_header.index).serialize(fd);
-                        response->serialize(fd);
-                        transmit_lock.unlock();
+                        // Create a new thread to handle replying
+                        join_finished_workers();
+                        req_handler_workers.push_back(std::thread{ [this, response, received_header]() {
+                            auto send_func = [this](auto buf, auto len) { send(buf, len); };
+                            transmit_lock.lock();
+                            MessageHeader(response, received_header.index).serialize(send_func);
+                            response->serialize(send_func);
+                            transmit_lock.unlock();
+                        }});
+
                     } else {
                         std::cerr << "Error: Cannot send response for " << protocol::msg_type_to_string(received_header.raw_type) << " request" << std::endl;
                     }
@@ -157,15 +182,39 @@ namespace fmerge {
     void Connection::receive(void *buffer, size_t len) {
         size_t read{0};
         
+        //TODO: This function is utter trash. We need to somehow make this use callbacks, ie. linux event system :S
+
         while(read < len) {
             ssize_t received = recv(fd, reinterpret_cast<unsigned char*>(buffer) + read, len - read, 0);
-            read += received;
-
-            if(received == 0) {
+            if(received == 0 || disconnect) {
                 throw connection_terminated_exception();
             } else if(received == -1) {
-                print_clib_error("recv");
-                throw std::runtime_error("Connection failed");
+                if(errno != EAGAIN && errno != EWOULDBLOCK) {
+                    print_clib_error("recv");
+                    throw std::runtime_error("Connection failed");
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            } else {
+                read += received;
+            }
+        }
+    }
+
+    void Connection::send(const void* buffer, size_t len) {
+        size_t written{0};
+        
+        while(written < len) {
+            ssize_t n = write(fd, reinterpret_cast<const unsigned char*>(buffer) + written, len - written);
+            if(n == 0 || disconnect) {
+                throw connection_terminated_exception();
+            } else if(n == -1) {
+                if(errno != EAGAIN && errno != EWOULDBLOCK) {
+                    print_clib_error("write");
+                    throw std::runtime_error("Connection failed");
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            } else {
+                written += n;
             }
         }
     }
@@ -200,6 +249,8 @@ namespace fmerge {
         if(client_sock == -1) {
             print_clib_error("accept");
         }
+
+        fcntl(client_sock, F_SETFL, O_NONBLOCK);
 
         char addr_string[INET6_ADDRSTRLEN];
         if(getnameinfo(reinterpret_cast<sockaddr*>(&client_addr), client_addr_size, addr_string, sizeof(addr_string), nullptr, 0, NI_NUMERICHOST) != 0) {

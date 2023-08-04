@@ -16,6 +16,7 @@ namespace fmerge {
     typedef unsigned short transmission_idx;
 
     constexpr int MAX_RESPONCE_WORKERS{16};
+    constexpr int MAX_REQUEST_WORKERS{32};
 
     class connection_terminated_exception : public std::exception {
     public:
@@ -26,6 +27,7 @@ namespace fmerge {
     public:
         Connection() = delete;
         Connection(int _fd, std::string _address) : fd(_fd), address(_address) {}
+        ~Connection();
     
         typedef std::function<void(std::shared_ptr<protocol::Message>)> ResponseCallback;
         typedef std::function<std::shared_ptr<protocol::Message>(std::shared_ptr<protocol::Message>)> RequestCallback;
@@ -36,10 +38,14 @@ namespace fmerge {
         std::atomic<transmission_idx> message_index{0};
         std::thread listener_thread_handle;
 
-        std::atomic<int> resp_handler_worker_count;
+        std::atomic<int> resp_handler_worker_count{0};
         std::vector<std::thread> resp_handler_workers;
+        std::atomic<int> req_handler_worker_count{0};
+        std::vector<std::thread> req_handler_workers;
+
         void join_finished_workers();
 
+        std::atomic<bool> disconnect{false};
         void listener_thread(RequestCallback request_callback);
 
         struct PendingResponse { transmission_idx index; protocol::MessageType type; ResponseCallback callback; };
@@ -53,6 +59,8 @@ namespace fmerge {
         // Blocking receive that is guaranteed to return the requested number of bytes
         // May throw an exception if the peer disconnects.
         void receive(void *buffer, size_t len);
+        // Blocking write that is guaranteed to write the requested number of bytes
+        void send(const void *buffer, size_t len);
 
         std::string get_address() { return address; };
         int get_fd() { return fd; };
@@ -70,7 +78,7 @@ namespace fmerge {
         unsigned long length{};
         transmission_idx index{};
 
-        void serialize(int fd) const;
+        void serialize(protocol::WriteFunc send) const;
         static MessageHeader deserialize(protocol::ReadFunc receive);
     };
 

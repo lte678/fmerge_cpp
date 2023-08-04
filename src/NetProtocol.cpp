@@ -16,6 +16,8 @@ namespace fmerge::protocol {
             res =  "CHANGES";
         } else if (underlying_type == MsgFileTransfer) {
             res =  "FILE_TRANSFER";
+        } else if (underlying_type == MsgStartSync) {
+            res = "START_SYNC";
         } else if (underlying_type == MsgUnknown) {
             res =  "UNKNOWN";
         } else {
@@ -28,8 +30,8 @@ namespace fmerge::protocol {
     }
 
 
-    void FileTransferRequest::serialize(int fd) const {
-        write(fd, filepath.c_str(), filepath.length());
+    void FileTransferRequest::serialize(WriteFunc write) const {
+        write(filepath.c_str(), filepath.length());
     }
 
 
@@ -44,14 +46,14 @@ namespace fmerge::protocol {
     }
     
 
-    void VersionResponse::serialize(int fd) const {
+    void VersionResponse::serialize(WriteFunc write) const {
         // Note:: Serialize adds the header, while deserialize does not expect it!
         unsigned int netmajor = htole32(major);
-        write(fd, &netmajor, sizeof(netmajor));
+        write(&netmajor, sizeof(netmajor));
         unsigned int netminor = htole32(minor);
-        write(fd, &netminor, sizeof(netminor));
+        write(&netminor, sizeof(netminor));
 
-        write(fd, uuid.data(), uuid.size());
+        write(uuid.data(), uuid.size());
     }
 
 
@@ -77,8 +79,8 @@ namespace fmerge::protocol {
     }
 
 
-    void ChangesResponse::serialize(int fd) const {
-        write(fd, serialized_changes.c_str(), length());
+    void ChangesResponse::serialize(WriteFunc write) const {
+        write(serialized_changes.c_str(), length());
     }
 
 
@@ -92,19 +94,17 @@ namespace fmerge::protocol {
     }
 
 
-    void FileTransferResponse::serialize(int fd) const {
+    void FileTransferResponse::serialize(WriteFunc write) const {
         long mtime_le = htole64(modification_time);
-        write(fd, &mtime_le, sizeof(mtime_le));
+        write(&mtime_le, sizeof(mtime_le));
 
         long atime_le = htole64(access_time);
-        write(fd, &atime_le, sizeof(atime_le));
+        write(&atime_le, sizeof(atime_le));
 
         auto ftype_char = static_cast<unsigned char>(ftype);
-        write(fd, &ftype_char, sizeof(ftype_char));
+        write(&ftype_char, sizeof(ftype_char));
 
-        if(write(fd, payload.get(), payload_len) != static_cast<long int>(payload_len)) {
-            std::cerr << "[Error] Failed to transfer all bytes of file transfer payload!" << std::endl;
-        }
+        write(payload.get(), payload_len);
     }
 
 
@@ -134,12 +134,17 @@ namespace fmerge::protocol {
             return std::make_shared<ChangesResponse>(ChangesResponse::deserialize(receive, length));
         } else if(raw_type == MsgFileTransfer) {
             return std::make_shared<FileTransferResponse>(FileTransferResponse::deserialize(receive, length));
+        } else if(raw_type == MsgStartSync) {
+            return std::make_shared<StartSyncResponse>(StartSyncResponse::deserialize());
+
         } else if(raw_type == (MsgVersion | MsgRequestFlag)) {
             return std::make_shared<VersionRequest>(VersionRequest());
         } else if(raw_type == (MsgChanges | MsgRequestFlag)) {
             return std::make_shared<ChangesRequest>(ChangesRequest());
         } else if(raw_type == (MsgFileTransfer | MsgRequestFlag)) {
             return std::make_shared<FileTransferRequest>(FileTransferRequest::deserialize(receive, length));
+        } else if(raw_type == (MsgStartSync | MsgRequestFlag)) {
+            return std::make_shared<StartSyncRequest>(StartSyncRequest());
         }else {
             std::cerr << "Cannot deserialize message type " << msg_type_to_string(raw_type);
             return nullptr;

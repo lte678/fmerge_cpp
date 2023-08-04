@@ -1,5 +1,7 @@
 #include "MergeAlgorithms.h"
 
+#include "Terminal.h"
+
 #include <iomanip>
 
 
@@ -59,8 +61,20 @@ namespace fmerge {
         SortedOperationSet operations{}; // The file operations required to achieve the merged file tree on the local device
         std::vector<Conflict> conflicts{};
 
+        unsigned long progress_counter{0};
+        float progress_counter_end{static_cast<float>(loc.size() + rem.size())};
+
+        std::cout << "Merging " <<  loc.size() + rem.size() << " changes..." << std::endl;
+        std::cout << "Using " << loc.bucket_count() << " buckets" << std::endl;
+
         // Work starting with the 'loc' branch, but this process MUST be symmetric!
         for(const auto &file_changes : loc) {
+            // TODO: Check if progress bar option enabled
+            if(progress_counter % 100) {
+                print_progress_bar(static_cast<float>(progress_counter) / progress_counter_end, "Merging");
+            }
+            progress_counter++;
+
             const auto &path = file_changes.first;
             if(change_set_contains(rem, path)) {
                 // TODO: Add some smarter merge conflict resolutions
@@ -105,6 +119,11 @@ namespace fmerge {
 
         // Repeat for 'rem' branch, but ignore conflicts, since these must already all have been resolved
         for(const auto &file_changes : rem) {
+            if(progress_counter % 100) {
+                print_progress_bar(static_cast<float>(progress_counter) / progress_counter_end, "Merging");
+            }
+            progress_counter++;
+
             const auto &path = file_changes.first;
             if(!change_set_contains(loc, path)) {
                 // Trivial merge. The other branch never did anything with this file
@@ -115,6 +134,7 @@ namespace fmerge {
         }
 
         // Done merging
+        print_progress_bar(1.0f, "Merging");
         if(conflicts.size() > 0) {
             return std::make_tuple(SortedChangeSet{}, SortedOperationSet{}, conflicts);
         }

@@ -11,9 +11,13 @@
 
 
 namespace fmerge {
+    StateController::~StateController() {
+    }
+
     void StateController::run() {
         c->listen([this](auto msg_type) { return handle_request(msg_type); });
 
+        std::cout << "Checking version" << std::endl;
         c->send_request(std::make_shared<protocol::VersionRequest>(), [this](auto msg) { handle_version_response(msg); });
 
         wait_for_state(State::SendTree);
@@ -23,6 +27,10 @@ namespace fmerge {
         wait_for_state(State::ResolvingConflicts);
         do_merge();
 
+        wait_for_state(State::SyncUserWait);
+        if(!ask_proceed()) {
+            return;
+        }
         wait_for_state(State::SyncingFiles);
         std::cout << "Performing file sync. This may take a while..." << std::endl;
         do_sync();
@@ -39,6 +47,8 @@ namespace fmerge {
             return handle_changes_request(msg);
         } else if(msg->type() == protocol::MsgFileTransfer) {
             return handle_file_transfer_request(msg);
+        } else if(msg->type() == protocol::MsgStartSync) {
+            return handle_start_sync_request();
         }
         // Error message is handled caller function
         return nullptr;
@@ -130,6 +140,14 @@ namespace fmerge {
     }
 
 
+    std::shared_ptr<protocol::Message> StateController::handle_start_sync_request() {
+        state_lock.lock();
+        state = State::SyncingFiles;
+        state_lock.unlock();
+        return std::make_shared<protocol::StartSyncResponse>();
+    }
+
+
     void StateController::handle_file_transfer_response(std::shared_ptr<protocol::Message> msg, std::string filepath) {
         auto ft_msg = std::static_pointer_cast<protocol::FileTransferResponse>(msg);
         //std::cout << "Received " << filepath << " from peer (" << ft_msg->payload_len << " bytes) " << std::endl;
@@ -205,7 +223,7 @@ namespace fmerge {
             //print_sorted_changes(merged_sorted_changes);
             std::cout << "Pending operations:" << std::endl;
             print_sorted_operations(operations);
-            state = SyncingFiles;
+            state = SyncUserWait;
         }
     }
 
@@ -214,7 +232,6 @@ namespace fmerge {
         //std::vector<Change> processed_changes{};
         unsigned long processed_change_count{0};
         // This is probably too strict of a lock
-        state_lock.lock();
         for(const auto& file_ops : pending_operations) {
             if(processed_change_count % 250 == 0) {
                 print_progress_bar(static_cast<float>(processed_change_count) / static_cast<float>(pending_operations.size()), "Syncing");
@@ -259,6 +276,21 @@ namespace fmerge {
         // This creates duplicates once we also update the filetree on-disk structure at the next execution
         //write_changes(path, recombine_changes_by_file(sorted_local_changes));
         std::cout << "Saved changes to disk" << std::endl;
+    }
+
+    bool StateController::ask_proceed() {
+        char response = prompt_choice("yn");
+        if(response == 'y') {
+            c->send_request(std::make_shared<protocol::StartSyncRequest>(),
+                [this](auto) {
+                    state_lock.lock(); 
+                    if(state == State::SyncUserWait) state = State::SyncingFiles;
+                    state_lock.unlock();
+                });
+            return true;
+        }
+        std::cout << "Exiting." << std::endl;
+        return false;
     }
 
     void StateController::wait_for_state(State target_state) {

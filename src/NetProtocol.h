@@ -9,6 +9,9 @@
 
 namespace fmerge::protocol {
 
+    typedef std::function<void(void*,size_t)> ReadFunc;
+    typedef std::function<void(const void*,size_t)> WriteFunc;
+
     // Warning: last bit is reserved for the request/response flag
     typedef unsigned short MessageType;
     
@@ -16,14 +19,15 @@ namespace fmerge::protocol {
     constexpr MessageType MsgVersion      = 2;
     constexpr MessageType MsgChanges      = 3;
     constexpr MessageType MsgFileTransfer = 4;
-    constexpr MessageType MsgUnknown      = 5;
+    constexpr MessageType MsgStartSync    = 5;
+    constexpr MessageType MsgUnknown      = 0x4000;
     constexpr MessageType MsgRequestFlag  = 0x8000;
 
     std::string msg_type_to_string(const MessageType msg);
 
 
     struct Message {
-        virtual void serialize(int fd) const = 0;
+        virtual void serialize(WriteFunc write) const = 0;
 
         virtual MessageType raw_type() const = 0;
         virtual unsigned long length() const = 0;
@@ -33,12 +37,9 @@ namespace fmerge::protocol {
     };
 
 
-    typedef std::function<void(void*,size_t)> ReadFunc;
-
-
     struct EmptyRequest : public Message {
         // A request that does not require any extra parameters, such as a VersionRequest or ChangesRequest.
-        void serialize(int) const override {};
+        void serialize(WriteFunc) const override {};
         unsigned long length() const override { return 0; };
     };
 
@@ -52,13 +53,17 @@ namespace fmerge::protocol {
         MessageType raw_type() const override { return MsgRequestFlag | MsgChanges; };
     };
 
+    struct StartSyncRequest : public EmptyRequest {
+        MessageType raw_type() const override { return MsgRequestFlag | MsgStartSync; };
+    };
+
 
     struct FileTransferRequest : public Message {
         FileTransferRequest(std::string _filepath) : filepath(_filepath) {};
 
         std::string filepath;
 
-        void serialize(int fd) const override;
+        void serialize(WriteFunc write) const override;
         static FileTransferRequest deserialize(ReadFunc receive, unsigned long length);
 
         MessageType raw_type() const override { return MsgRequestFlag | MsgFileTransfer; };
@@ -72,13 +77,19 @@ namespace fmerge::protocol {
         int minor{};
         std::array<unsigned char, 16> uuid{};
 
-        void serialize(int fd) const override;
+        void serialize(WriteFunc write) const override;
         static VersionResponse deserialize(ReadFunc receive);
 
         MessageType raw_type() const override { return MsgVersion; };
         unsigned long length() const override { return sizeof(major) + sizeof(minor) + 16; };
     };
 
+    struct StartSyncResponse : public Message {
+        void serialize(WriteFunc) const override {};
+        static StartSyncResponse deserialize() { return StartSyncResponse(); };
+        MessageType raw_type() const override { return MsgStartSync; };
+        unsigned long length() const override { return 0; };
+    };
 
     struct ChangesResponse : public Message {
         // Transmit all the changes that the connection partner has not yet received.
@@ -89,7 +100,7 @@ namespace fmerge::protocol {
         std::vector<Change> changes;
         std::string serialized_changes;
 
-        void serialize(int fd) const override;
+        void serialize(WriteFunc write) const override;
         static ChangesResponse deserialize(ReadFunc receive, unsigned long length);
 
         inline MessageType raw_type() const { return MsgChanges; };
@@ -114,7 +125,7 @@ namespace fmerge::protocol {
         long modification_time;
         long access_time;
 
-        void serialize(int fd) const override;
+        void serialize(WriteFunc write) const override;
         static FileTransferResponse deserialize(ReadFunc receive, unsigned long length);
 
         inline MessageType raw_type() const { return MsgFileTransfer; };
