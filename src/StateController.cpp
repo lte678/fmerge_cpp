@@ -200,9 +200,9 @@ namespace fmerge {
         state_lock.lock();
         auto sorted_peer_changes = sort_changes_by_file(peer_changes);
 
-        print_sorted_changes(sorted_peer_changes);
+        // print_sorted_changes(sorted_peer_changes);
 
-        std::cout << "Merging..." << std::endl;
+        // std::cout << "Merging..." << std::endl;
         // These start out empty by default
         std::unordered_map<std::string, ConflictResolution> resolutions{};
         sorted_local_changes = sort_changes_by_file(read_changes(path));

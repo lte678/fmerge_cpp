@@ -64,8 +64,8 @@ namespace fmerge {
         unsigned long progress_counter{0};
         float progress_counter_end{static_cast<float>(loc.size() + rem.size())};
 
-        std::cout << "Merging " <<  loc.size() + rem.size() << " changes..." << std::endl;
-        std::cout << "Using " << loc.bucket_count() << " buckets" << std::endl;
+        // std::cout << "Merging " <<  loc.size() + rem.size() << " changes..." << std::endl;
+        // std::cout << "Using " << loc.bucket_count() << " buckets" << std::endl;
 
         // Work starting with the 'loc' branch, but this process MUST be symmetric!
         for(const auto &file_changes : loc) {
