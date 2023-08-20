@@ -1,7 +1,5 @@
 #pragma once
 
-#include "FileTree.h"
-
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <time.h>
@@ -20,7 +18,7 @@ namespace fmerge {
     using std::optional;
     typedef struct stat Stat;
 
-    enum class FileType {
+    enum class FileType : unsigned char {
         Unknown,
         Directory,
         File,
@@ -36,6 +34,17 @@ namespace fmerge {
         unsigned long fsize;
     };
 
+
+    struct File {
+        std::string path{};
+        FileType type{FileType::Unknown};
+
+        inline bool is_dir() const { return type == FileType::Directory; };
+        inline bool is_file() const { return type == FileType::File; };
+        inline bool is_link() const { return type == FileType::Link; };
+    };
+    
+
     optional<FileStats> get_file_stats(std::string filepath);
     bool set_timestamp(std::string filepath, long mod_time, long access_time);
     bool exists(std::string filepath);
@@ -48,11 +57,12 @@ namespace fmerge {
     std::string join_path(std::string p1, std::string p2);
     std::string path_to_str(std::vector<std::string> tokens);
 
-    void _for_file_in_dir(std::string basepath, std::string prefix, std::function<void(std::string, const FileStats&)> f);
-    inline void for_file_in_dir(std::string basepath, std::function<void(std::string, const FileStats&)> f) {
+    void _for_file_in_dir(std::string basepath, std::string prefix, std::function<void(File, const FileStats&)> f);
+    inline void for_file_in_dir(std::string basepath, std::function<void(File, const FileStats&)> f) {
         _for_file_in_dir(basepath, "", f);
     }
 
-    // Check if path should be ignored
-    bool path_ignored(const std::string &path, bool is_dir);
+    // Check if file should be ignored
+    bool file_ignored(const File &file);
+    std::ostream& operator<<(std::ostream& os, const FileType& filetype);
 }

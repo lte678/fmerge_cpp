@@ -11,7 +11,7 @@
 
 namespace fmerge {
 
-    MetadataNode::MetadataNode(std::string _name, long _mtime) : mtime(_mtime) {
+    MetadataNode::MetadataNode(std::string _name, FileType _ftype, long _mtime) : mtime(_mtime), ftype(_ftype) {
         size_t filename_len = _name.length();
         char* _cname = new char[filename_len + 1];
         strncpy(_cname, _name.c_str(), filename_len + 1);
@@ -22,8 +22,9 @@ namespace fmerge {
     void MetadataNode::serialize(std::ostream& stream) const {
         unsigned short name_len = static_cast<unsigned short>(strlen(name));
         stream.write(reinterpret_cast<const char*>(&name_len), sizeof(name_len));
-        stream.write(name, strlen(name));
+        stream.write(name, name_len);
         stream.write(reinterpret_cast<const char*>(&mtime), sizeof(mtime));
+        stream.write(reinterpret_cast<const char*>(&ftype), sizeof(ftype));
     }
 
 
@@ -34,9 +35,11 @@ namespace fmerge {
         stream.read(name, name_len);
         name[name_len] = '\0';
         long mtime;
-        stream.read(reinterpret_cast<char*>(&mtime), sizeof(long));
+        FileType ftype;
+        stream.read(reinterpret_cast<char*>(&mtime), sizeof(mtime));
+        stream.read(reinterpret_cast<char*>(&ftype), sizeof(ftype));
 
-        return MetadataNode(name, mtime);
+        return MetadataNode(name, ftype, mtime);
     }
 
 
@@ -159,6 +162,9 @@ namespace fmerge {
 
 
     bool operator==(const Change& lhs, const Change& rhs) {
+        if(lhs.file.type != rhs.file.type) {
+            return false;
+        }
         if(lhs.earliest_change_time != rhs.earliest_change_time) {
             return false;
         }
@@ -168,7 +174,7 @@ namespace fmerge {
         if(lhs.type != rhs.type) {
             return false;
         }
-        if(lhs.path != rhs.path) {
+        if(lhs.file.path != rhs.file.path) {
             return false;
         }
         return true;
@@ -176,7 +182,7 @@ namespace fmerge {
 
 
     std::ostream& operator<<(std::ostream& os, const Change& change) {
-        os << std::setw(16) << std::left << change.type << change.path;
+        os << std::setw(16) << std::left << change.type << change.file.type << " " << change.file.path;
         return os;
     }
 
@@ -185,7 +191,8 @@ namespace fmerge {
         stream << static_cast<int>(type) << ",";
         stream << earliest_change_time << ",";
         stream << latest_change_time << ",";
-        stream << path << std::endl; 
+        stream << static_cast<int>(file.type) << ",";
+        stream << file.path << std::endl; 
     }
 
 
@@ -208,9 +215,14 @@ namespace fmerge {
         ret.latest_change_time = std::stol(buffer.str());
         buffer.str("");
 
+        stream.get(buffer, ',');
+        stream.seekg(1, std::ios_base::cur); // Seek to after the delimiter
+        ret.file.type = static_cast<FileType>(std::stoi(buffer.str()));
+        buffer.str("");
+
         stream.get(buffer, '\n');
         stream.seekg(1, std::ios_base::cur); // Seek to after the delimiter
-        ret.path = buffer.str();
+        ret.file.path = buffer.str();
 
         return ret;
     }
@@ -221,8 +233,8 @@ namespace fmerge {
         unsigned int total_number_files{0};
         if(show_loading_bar) {
             for_file_in_dir(base_path,
-                [&total_number_files](auto path, auto stats) {
-                    if(path_ignored(path, stats.type == FileType::Directory)) {
+                [&total_number_files](auto file, auto) {
+                    if(file_ignored(file)) {
                         return;
                     }
                     total_number_files++;
@@ -233,8 +245,8 @@ namespace fmerge {
 
         unsigned int num_files_processed{0};
         for_file_in_dir(base_path,
-            [=, &num_files_processed](std::string path, const FileStats& stats) {
-                if(path_ignored(path, stats.type == FileType::Directory)) {
+            [=, &num_files_processed](auto file, const FileStats& stats) {
+                if(file_ignored(file)) {
                     return;
                 }
 
@@ -244,7 +256,7 @@ namespace fmerge {
                     print_progress_bar(static_cast<float>(num_files_processed) / static_cast<float>(total_number_files), "Building File Tree");
                 }
 
-                auto path_tokens = split_path(path);
+                auto path_tokens = split_path(file.path);
 
                 shared_ptr<DirNode> parent_node;
                 if(path_tokens.size() > 1) {
@@ -261,28 +273,29 @@ namespace fmerge {
                 }
                 // std::cout << "Added " << path_tokens.back() << std::endl;
 
-                if(stats.type == FileType::Directory) {
+                if(file.is_dir()) {
                     auto existing_file = parent_node->get_child_dir(path_tokens.back());
                     if(!existing_file) {
                         parent_node->subdirs.push_back(
-                            std::make_shared<DirNode>(MetadataNode(path_tokens.back(), stats.mtime))
+                            std::make_shared<DirNode>(MetadataNode(path_tokens.back(), stats.type, stats.mtime))
                         );
                     } else {
                         // Update the metadata to match what is actually on disk
                         existing_file->metadata->mtime = stats.mtime;
                     }
-                } else if(stats.type == FileType::File || stats.type == FileType::Link) {
+                } else if(file.is_file() || file.is_link()) {
                     auto existing_file = parent_node->get_child_file(path_tokens.back());
                     if(!existing_file) {
                         parent_node->files.push_back(
-                            std::make_shared<MetadataNode>(path_tokens.back(), stats.mtime)
+                            std::make_shared<MetadataNode>(path_tokens.back(), stats.type, stats.mtime)
                         );
                     } else {
                         // Update the metadata to match what is actually on disk
                         existing_file->mtime = stats.mtime;
+                        existing_file->ftype = stats.type;
                     }
                 } else {
-                    std::cerr << "[Error] " << path << ": Unknown file type (" << static_cast<int>(stats.type) << std::endl;
+                    std::cerr << "[Error] " << file.path << ": Unknown file type (" << static_cast<int>(stats.type) << std::endl;
                 }
             }
         );
@@ -294,52 +307,70 @@ namespace fmerge {
     }
 
 
-    optional<Change> compare_metadata(shared_ptr<MetadataNode> from_node, shared_ptr<MetadataNode> to_node, std::string path, bool is_dir) {
+    std::vector<Change> compare_metadata(shared_ptr<MetadataNode> from_node, shared_ptr<MetadataNode> to_node, std::string path) {
         // Logic to determine what has changed.
         // This is one of the most critical parts of this application
         
         if(from_node && to_node) {
             // Ignore all directory changes other than creation and deletion
-            if(is_dir) {
-                return std::nullopt;
+            if(from_node->ftype == FileType::Directory && to_node->ftype == FileType::Directory) {
+                return {};
             }
+            // The type of object differs. This means the previous was deleted, and the latter was created
+            if(from_node->ftype != to_node->ftype) {
+                return {
+                    Change {
+                        .type = ChangeType::Deletion,
+                        .earliest_change_time = from_node->mtime,
+                        .latest_change_time = to_node->mtime,
+                        .file = File{.path=path, .type=from_node->ftype}
+                    },
+                    Change {
+                        .type = ChangeType::Modification,
+                        .earliest_change_time = to_node->mtime,
+                        .latest_change_time = 0,
+                        .file = File{.path=path, .type=to_node->ftype}
+                    }
+                };
+            }
+            // Both objects exist and are file-like
             // Compare modification times for files
             if(from_node->mtime < to_node->mtime) {
-                return Change {
+                return {Change {
                     .type = ChangeType::Modification,
                     .earliest_change_time = to_node->mtime,
                     .latest_change_time = 0,
-                    .path = path,
-                };
+                    .file = File{.path=path, .type=to_node->ftype}
+                }};
             } else if(from_node->mtime > to_node->mtime) {
                 std::cout << "[Warning] Modification time of " << path << " lies " << 
                     from_node->mtime - to_node->mtime << "s in the future!" << std::endl;
-                return std::nullopt;
+                return {};
             } else {
-                return std::nullopt;
+                return {};
             }
         }
 
         if(from_node && !to_node) {
-            return Change {
+            return {Change {
                 .type = ChangeType::Deletion,
                 .earliest_change_time = from_node->mtime,
                 .latest_change_time = get_timestamp_now(),
-                .path = path,
-            };
+                .file = {.path=path, .type=from_node->ftype},
+            }};
         }
 
         if(to_node && !from_node) {
-            return Change {
+            return {Change {
                 .type = ChangeType::Modification,
                 .earliest_change_time = to_node->mtime,
                 .latest_change_time = 0,
-                .path = path,
-            };
+                .file = {.path=path, .type=to_node->ftype},
+            }};
         }
 
         std::cerr << "[Error] Change could not be properly identified!" << std::endl;
-        return Change{.type = ChangeType::Unknown};
+        return {Change{.type = ChangeType::Unknown}};
     }
 
 
@@ -359,8 +390,8 @@ namespace fmerge {
                 } else {
                     to_metadata = to_tree->get_child_file(path);
                 }
-                auto change = compare_metadata(from_metadata, to_metadata, path_to_str(path), is_dir);
-                if(change.has_value()) changes.push_back(*change);
+                auto new_changes = compare_metadata(from_metadata, to_metadata, path_to_str(path));
+                changes.insert(changes.end(), new_changes.begin(), new_changes.end());
             }
         );
 
@@ -385,7 +416,7 @@ namespace fmerge {
                         .type = ChangeType::Creation,
                         .earliest_change_time = to_metadata->mtime,
                         .latest_change_time = 0,
-                        .path = path_to_str(path),
+                        .file = {.path=path_to_str(path), .type=to_metadata->ftype},
                     });
                 }
             }
@@ -463,7 +494,7 @@ namespace fmerge {
         std::string filetree_file = join_path(path, ".fmerge/filetree.db");
 
         auto root_stats = get_file_stats(path);
-        auto root_node = std::make_shared<DirNode>(split_path(path).back(), root_stats->mtime);
+        auto root_node = std::make_shared<DirNode>(split_path(path).back(), root_stats->type, root_stats->mtime);
         update_file_tree(root_node, path); // This is where the current file tree is built in memory
 
         // Attempt to detect changes
@@ -471,7 +502,7 @@ namespace fmerge {
         if(!exists(filetree_file)) {
             std::cout << "No historical filetree.db containing historical data found. Assuming new folder." << std::endl;
             
-            auto blank_node = std::make_shared<DirNode>(split_path(path).back(), 0);
+            auto blank_node = std::make_shared<DirNode>(split_path(path).back(), FileType::Directory, 0);
             new_changes = compare_trees(blank_node, root_node);
         } else {
             std::ifstream serialized_tree(filetree_file, std::ios_base::binary); 

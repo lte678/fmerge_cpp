@@ -212,7 +212,7 @@ namespace fmerge {
         if(conflicts.size() > 0) {
             std::cerr << "!!! Merge conflicts occured for the following paths:" << std::endl;
             for(const auto &conflict : conflicts) { 
-                std::cout << "    " << conflict.conflict_key << std::endl;
+                std::cout << "    " << "CONFLICT  " << conflict.conflict_key << std::endl;
             }
             // TODO: Create user interface for conflict resolutions
         } else {

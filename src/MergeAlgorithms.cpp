@@ -7,7 +7,7 @@
 
 namespace fmerge {
     
-    inline bool change_set_contains(SortedChangeSet set, std::string key) { return set.find(key) != set.end(); };
+    inline bool change_set_contains(const SortedChangeSet &set, std::string key) { return set.find(key) != set.end(); };
 
 
     std::ostream& operator<<(std::ostream& os, FileOperationType fop_type) {
@@ -33,12 +33,12 @@ namespace fmerge {
     SortedChangeSet sort_changes_by_file(std::vector<Change> changes) {
         SortedChangeSet sorted_set{};
         for(const auto &change : changes) {
-            if(sorted_set.find(change.path) == sorted_set.end()) {
+            if(sorted_set.find(change.file.path) == sorted_set.end()) {
                 // The key is not yet present in the unordered map
-                sorted_set.emplace(change.path, std::vector<Change>{change});
+                sorted_set.emplace(change.file.path, std::vector<Change>{change});
             } else {
                 // The key is present
-                sorted_set.at(change.path).push_back(change);
+                sorted_set.at(change.file.path).push_back(change);
             }
         }
         return sorted_set;
@@ -103,7 +103,7 @@ namespace fmerge {
                     for(size_t i = 0; i < file_changes.second.size(); i++) {
                         if(i >= rem_file_changes.size()) {
                             conflict = true;
-                        } else if(!(rem_file_changes[i] == file_changes.second[i])) {
+                        } else if(!is_change_equal(rem_file_changes[i], file_changes.second[i])) {
                             conflict = true;
                         }
                     }
@@ -135,6 +135,7 @@ namespace fmerge {
 
         // Done merging
         print_progress_bar(1.0f, "Merging");
+        std::cout << std::endl;
         if(conflicts.size() > 0) {
             return std::make_tuple(SortedChangeSet{}, SortedOperationSet{}, conflicts);
         }
@@ -151,15 +152,15 @@ namespace fmerge {
             switch(change.type) {
             case ChangeType::Creation:
                 // Transfer created file to our machine to also "create" it.
-                ops.emplace_back(FileOperation{FileOperationType::Transfer, change.path});
+                ops.emplace_back(FileOperation{FileOperationType::Transfer, change.file.path});
                 break;
             case ChangeType::Deletion:
                 // Also delete the file on our machine
-                ops.emplace_back(FileOperation{FileOperationType::Delete, change.path});
+                ops.emplace_back(FileOperation{FileOperationType::Delete, change.file.path});
                 break;
             case ChangeType::Modification:
                 // Transfer modified file to our machine to also "modify" it.
-                ops.emplace_back(FileOperation{FileOperationType::Transfer, change.path});
+                ops.emplace_back(FileOperation{FileOperationType::Transfer, change.file.path});
                 break;
             default:
                 std::cout << "[Error] Unknown change type " << change.type << std::endl;
@@ -176,19 +177,19 @@ namespace fmerge {
             switch(change.type) {
             case ChangeType::Creation:
                 // To revert the file tree we have to delete the file again
-                ops.emplace_back(FileOperation{FileOperationType::Delete, change.path});
+                ops.emplace_back(FileOperation{FileOperationType::Delete, change.file.path});
                 break;
             case ChangeType::Deletion:
                 // To revert deletion, we have to recreate it. This is impossible.
                 // Thus we use a placeholder revert, which is optimized away, since this always indirectly
                 // implies that another remote file will be copied over this one.
-                ops.emplace_back(FileOperation{FileOperationType::PlaceholderRevert, change.path});
+                ops.emplace_back(FileOperation{FileOperationType::PlaceholderRevert, change.file.path});
                 break;
             case ChangeType::Modification:
                 // Reverting is impossible.
                 // Thus we use a placeholder revert, which is optimized away, since this always indirectly
                 // implies that another remote file will be copied over this one.
-                ops.emplace_back(FileOperation{FileOperationType::PlaceholderRevert, change.path});
+                ops.emplace_back(FileOperation{FileOperationType::PlaceholderRevert, change.file.path});
                 break;
             default:
                 std::cout << "[Error] Unknown change type " << change.type << std::endl;
@@ -208,6 +209,26 @@ namespace fmerge {
             }
         }
         return sqaushed_set;
+    }
+
+
+    bool is_change_equal(const Change& lhs, const Change& rhs) {
+        if(lhs.file.type != rhs.file.type) {
+            return false;
+        }
+        if(!lhs.file.is_dir() && (lhs.earliest_change_time != rhs.earliest_change_time)) {
+            return false;
+        }
+        if(!lhs.file.is_dir() && (lhs.latest_change_time != rhs.latest_change_time)) {
+            return false;
+        }
+        if(lhs.type != rhs.type) {
+            return false;
+        }
+        if(lhs.file.path != rhs.file.path) {
+            return false;
+        }
+        return true;
     }
 
 

@@ -74,6 +74,8 @@ namespace fmerge {
     // Is critical to avoid unnecessary and also impossible operations that are generated during the merge.
     SortedOperationSet squash_operations(const SortedOperationSet& ops);
 
+    bool is_change_equal(const Change& lhs, const Change& rhs);
+
     void print_sorted_changes(const SortedChangeSet &sorted_changes);
     void print_sorted_operations(const SortedOperationSet &sorted_ops);
 }

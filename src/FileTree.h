@@ -16,14 +16,18 @@ using std::optional;
 
 namespace fmerge {
 
+    // A tree consisting of Metadata nodes is constructed to represent the file 
+    // system on disk. It includes the minimal set of metadata required by the change
+    // detection algorithms.
     class MetadataNode {
     public:
         MetadataNode() = delete;
-        MetadataNode(const char* _name, long _mtime) : name(_name), mtime(_mtime) {}
-        MetadataNode(std::string _name, long _mtime);
+        MetadataNode(const char* _name, FileType _ftype, long _mtime) : name(_name), mtime(_mtime), ftype(_ftype) {}
+        MetadataNode(std::string _name, FileType _ftype, long _mtime);
         // Metadata
         const char* name;
         long mtime;
+        FileType ftype;
     public:
         void serialize(std::ostream& stream) const;
         static MetadataNode deserialize(std::istream& stream);
@@ -35,7 +39,7 @@ namespace fmerge {
         DirNode() = delete;
         DirNode(shared_ptr<MetadataNode> _metadata) : metadata(_metadata) {}
         DirNode(MetadataNode _metadata) : metadata(std::make_shared<MetadataNode>(_metadata)) {}
-        DirNode(std::string _name, long _mtime) : metadata(std::make_shared<MetadataNode>(_name, _mtime)) {}
+        DirNode(std::string _name, FileType _ftype, long _mtime) : metadata(std::make_shared<MetadataNode>(_name, _ftype, _mtime)) {}
 
         std::vector<shared_ptr<DirNode>> subdirs;
         std::vector<shared_ptr<MetadataNode>> files;
@@ -75,7 +79,7 @@ namespace fmerge {
         // inferred based on differences between one timestamp and another.
         long earliest_change_time{}; // This is the default field
         long latest_change_time{}; // Only used if range is necessary
-        std::string path{};
+        File file{}; // Aggregate of path and dir/file/link indentification
     public:
         friend std::ostream& operator<<(std::ostream& os, const Change& change);
         friend bool operator==(const Change& lhs, const Change& rhs);
@@ -85,7 +89,7 @@ namespace fmerge {
     };
 
     void update_file_tree(shared_ptr<DirNode> base_node, std::string base_path, bool show_loading_bar = true);
-    optional<Change> compare_metadata(shared_ptr<MetadataNode> from_node, shared_ptr<MetadataNode> to_node, std::string path, bool is_dir);
+    std::vector<Change> compare_metadata(shared_ptr<MetadataNode> from_node, shared_ptr<MetadataNode> to_node, std::string path);
     std::vector<Change> compare_trees(shared_ptr<DirNode> from_tree, shared_ptr<DirNode> to_tree);
 
     std::vector<Change> deserialize_changes(std::istream& stream);

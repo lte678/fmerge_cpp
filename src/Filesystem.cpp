@@ -143,7 +143,7 @@ namespace fmerge {
     }
 
 
-    void _for_file_in_dir(std::string basepath, std::string prefix, std::function<void(std::string, const FileStats&)> f) {
+    void _for_file_in_dir(std::string basepath, std::string prefix, std::function<void(File, const FileStats&)> f) {
         // basepath must already be normalized with realpath/abs_path
         // The child files and directories are returned with prefix + / + filename
 
@@ -173,8 +173,9 @@ namespace fmerge {
                 auto relative_path = join_path(prefix, subdirname);
                 auto file_stats = get_file_stats(subdirpath);
                 if(file_stats.has_value()) {
-                    f(relative_path, *file_stats);
-                    if(file_stats->type == FileType::Directory) _for_file_in_dir(subdirpath, relative_path, f);
+                    File file{path:relative_path, type:file_stats->type};
+                    f(file, *file_stats);
+                    if(file.is_dir()) _for_file_in_dir(subdirpath, relative_path, f);
                 }
             }
         }
@@ -197,9 +198,9 @@ namespace fmerge {
     }
 
 
-    bool path_ignored(const std::string &path, bool is_dir) {
-        std::string compare_path = path;
-        if(is_dir) {
+    bool file_ignored(const File& file) {
+        std::string compare_path = file.path;
+        if(file.is_dir()) {
             compare_path.append("/");
         }
 
@@ -209,4 +210,19 @@ namespace fmerge {
         }
         return false;
     }
+
+
+    std::ostream& operator<<(std::ostream& os, const FileType& filetype) {
+        if(filetype == FileType::File) {
+            os << "F";
+        } else if(filetype == FileType::Directory) {
+            os << "D";
+        } else if(filetype == FileType::Link) {
+            os << "L";
+        } else {
+            os << "?";
+        }
+        return os;
+    }
+
 }
