@@ -7,6 +7,10 @@
 
 namespace fmerge {
 
+    using std::vector;
+    using std::optional;
+    using std::pair;
+
     typedef std::unordered_map<std::string, std::vector<Change>> SortedChangeSet;
 
 
@@ -63,6 +67,10 @@ namespace fmerge {
 
     std::tuple<SortedChangeSet, SortedOperationSet, std::vector<Conflict>>
         merge_change_sets(const SortedChangeSet &loc, const SortedChangeSet &rem, const std::unordered_map<std::string, ConflictResolution> &resolutions);
+
+    // Merges two lists of changes into a single list containing both sets. 
+    // Will fail if an obvious merge is not possible and user intervention is required.
+    optional<pair<vector<Change>, vector<FileOperation>>> try_automatic_resolution(const vector<Change> &rem, const vector<Change> &loc);
 
     // Create a list of file operations that create the given changes that originate from the remote
     std::vector<FileOperation> construct_changes(std::vector<Change> changes);

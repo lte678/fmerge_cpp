@@ -99,16 +99,18 @@ namespace fmerge {
                 } else {
                     // The user has not specified a resolution
                     auto rem_file_changes = rem.at(path);
-                    bool conflict{false};
-                    for(size_t i = 0; i < file_changes.second.size(); i++) {
-                        if(i >= rem_file_changes.size()) {
-                            conflict = true;
-                        } else if(!is_change_equal(rem_file_changes[i], file_changes.second[i])) {
-                            conflict = true;
-                        }
+                    auto file_merge_result = try_automatic_resolution(rem_file_changes, file_changes.second);
+                    if(file_merge_result.has_value()) {
+                        // Automatic resolution successful
+                        merged_set.emplace(path, file_merge_result->first);
+                        // Revert old changes and add merged changes.
+                        // This will lead to the set of operations required
+                        // to achieve the desired final merged state
+                        operations.emplace(path, file_merge_result->second);
+                    } else {
+                        // No automatic resolution was possible
+                        conflicts.emplace_back(path);
                     }
-                    // The user has not specified a resolution and no automatic resolution was possible
-                    if(conflict) conflicts.emplace_back(path);
                 }
                 
             } else {
@@ -142,6 +144,28 @@ namespace fmerge {
 
         operations = squash_operations(operations);
         return std::make_tuple(merged_set, operations, conflicts);
+    }
+
+
+    std::optional<std::pair<std::vector<Change>, std::vector<FileOperation>>> try_automatic_resolution(const std::vector<Change> &rem, const std::vector<Change> &loc) {
+        // Algorithms used to merge the change lists:
+        // Equal stems: Check if one branch is ahead of the other. The just fast-forward it a la git.
+        for(size_t i = 0; i < loc.size(); i++) {
+            if(i >= rem.size()) {
+                // The change lists match up to the latest common additions.
+                break;
+            } else if(!is_change_equal(rem[i], loc[i])) {
+                return std::nullopt;
+            }
+        }
+        // The change list stems match. Now take the longer change list
+        if(loc.size() >= rem.size()) {
+            // Use local changes. No local operations required
+            return std::pair<std::vector<Change>, std::vector<FileOperation>>{loc, std::vector<FileOperation>{}};
+        } else {
+            std::vector<Change> new_local_changes(rem.begin() + loc.size(), rem.end());
+            return std::pair<std::vector<Change>, std::vector<FileOperation>>{rem, construct_changes(new_local_changes)};
+        }
     }
 
 
