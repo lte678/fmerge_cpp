@@ -4,6 +4,7 @@
 #include "Connection.h"
 #include "Config.h"
 #include "StateController.h"
+#include "Terminal.h"
 
 #include <unistd.h>
 #include <getopt.h>
@@ -27,7 +28,7 @@ namespace fmerge {
 
 
 int server_mode(std::string path) {
-    std::cout << "Starting in server mode for \"" << path << "\"" << std::endl;
+    termbuf() << "Starting in server mode for \"" << path << "\"" << std::endl;
 
     if(!exists(path)) {
         std::cerr << "Illegal starting folder" << std::endl;
@@ -45,11 +46,11 @@ int server_mode(std::string path) {
     // Build file tree
     append_changes(path, get_new_tree_changes(path));
 
-    std::cout << "Waiting for peer connections..." << std::endl;
+    termbuf() << "Waiting for peer connections..." << std::endl;
 
     // Wait for peers
     listen_for_peers(4512, [=, &config](auto conn) {
-        std::cout << "Accepted connection from " << conn->get_address() << std::endl;
+        termbuf() << "Accepted connection from " << conn->get_address() << std::endl;
 
         StateController controller(std::move(conn), path, config);
         controller.run();
@@ -60,7 +61,7 @@ int server_mode(std::string path) {
 
 
 int client_mode(std::string path, std::string target_address) {
-    std::cout << "Starting in client mode for \"" << path << "\"" << std::endl;
+    termbuf() << "Starting in client mode for \"" << path << "\"" << std::endl;
 
     if(!exists(path)) {
         std::cerr << "Illegal starting folder" << std::endl;
@@ -80,7 +81,7 @@ int client_mode(std::string path, std::string target_address) {
 
     // Connect to server
     connect_to_server(4512, target_address, [=, &config](auto conn) {
-        std::cout << "Connected to " << conn->get_address() << std::endl;
+        termbuf() << "Connected to " << conn->get_address() << std::endl;
         
         StateController controller(std::move(conn), path, config);
         controller.run();
@@ -121,19 +122,19 @@ int main(int argc, char* argv[]) {
             mode = 1;
             target_address = optarg;
         } else if(opt == 'v') {
-            std::cout << "Version " << MAJOR_VERSION << "." << MINOR_VERSION << std::endl;
+            termbuf() << "Version " << MAJOR_VERSION << "." << MINOR_VERSION << std::endl;
             return 0;
         } else if(opt == 'd') {
             debug_protocol = true;
         } else if(opt == '?') {
             // We got an invalid option
             if(optopt == 'c') {
-                std::cout << "Usage: fmerge (-s|-c server_ip) [path]" << std::endl;
+                termbuf() << "Usage: fmerge (-s|-c server_ip) [path]" << std::endl;
                 return 1;
             }
             return 1;
         } else {
-            std::cout << "getopt_long: " << static_cast<char>(opt) << std::endl;
+            termbuf() << "getopt_long: " << static_cast<char>(opt) << std::endl;
         }
     }
     
@@ -142,12 +143,12 @@ int main(int argc, char* argv[]) {
         if(optind == (argc - 1)) {
             path_opt = argv[optind];
         } else if(optind == argc) {
-            std::cout << "Missing path!" << std::endl;
-            std::cout << "Usage: fmerge (-s|-c server_ip) [path]" << std::endl;
+            termbuf() << "Missing path!" << std::endl;
+            termbuf() << "Usage: fmerge (-s|-c server_ip) [path]" << std::endl;
             return 1;
         } else {
-            std::cout << "Only one path may be supplied." << std::endl;
-            std::cout << "Usage: fmerge (-s|-c server_ip) [path]" << std::endl;
+            termbuf() << "Only one path may be supplied." << std::endl;
+            termbuf() << "Usage: fmerge (-s|-c server_ip) [path]" << std::endl;
             return 1;
         }
     }
@@ -158,6 +159,6 @@ int main(int argc, char* argv[]) {
         return client_mode(path_opt, target_address);
     }
 
-    std::cout << "Usage: fmerge (-s|-c server_ip) [path]" << std::endl;
+    termbuf() << "Usage: fmerge (-s|-c server_ip) [path]" << std::endl;
     return 1;
 }

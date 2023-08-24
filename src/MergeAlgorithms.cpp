@@ -64,14 +64,14 @@ namespace fmerge {
         unsigned long progress_counter{0};
         float progress_counter_end{static_cast<float>(loc.size() + rem.size())};
 
-        // std::cout << "Merging " <<  loc.size() + rem.size() << " changes..." << std::endl;
-        // std::cout << "Using " << loc.bucket_count() << " buckets" << std::endl;
+        // termbuf() << "Merging " <<  loc.size() + rem.size() << " changes..." << std::endl;
+        // termbuf() << "Using " << loc.bucket_count() << " buckets" << std::endl;
 
         // Work starting with the 'loc' branch, but this process MUST be symmetric!
         for(const auto &file_changes : loc) {
             // TODO: Check if progress bar option enabled
             if(progress_counter % 100) {
-                print_progress_bar(static_cast<float>(progress_counter) / progress_counter_end, "Merging");
+                term()->update_progress_bar(static_cast<float>(progress_counter) / progress_counter_end, "Merging");
             }
             progress_counter++;
 
@@ -122,7 +122,7 @@ namespace fmerge {
         // Repeat for 'rem' branch, but ignore conflicts, since these must already all have been resolved
         for(const auto &file_changes : rem) {
             if(progress_counter % 100) {
-                print_progress_bar(static_cast<float>(progress_counter) / progress_counter_end, "Merging");
+                term()->update_progress_bar(static_cast<float>(progress_counter) / progress_counter_end, "Merging");
             }
             progress_counter++;
 
@@ -136,8 +136,7 @@ namespace fmerge {
         }
 
         // Done merging
-        print_progress_bar(1.0f, "Merging");
-        std::cout << std::endl;
+        term()->complete_progress_bar();
         if(conflicts.size() > 0) {
             return std::make_tuple(SortedChangeSet{}, SortedOperationSet{}, conflicts);
         }
@@ -187,7 +186,7 @@ namespace fmerge {
                 ops.emplace_back(FileOperation{FileOperationType::Transfer, change.file.path});
                 break;
             default:
-                std::cout << "[Error] Unknown change type " << change.type << std::endl;
+                termbuf() << "[Error] Unknown change type " << change.type << std::endl;
             }
         }
         return ops;
@@ -216,7 +215,7 @@ namespace fmerge {
                 ops.emplace_back(FileOperation{FileOperationType::PlaceholderRevert, change.file.path});
                 break;
             default:
-                std::cout << "[Error] Unknown change type " << change.type << std::endl;
+                termbuf() << "[Error] Unknown change type " << change.type << std::endl;
             }
         }
         return ops;
@@ -258,11 +257,11 @@ namespace fmerge {
 
     void print_sorted_changes(const SortedChangeSet &sorted_changes) {
         for(const auto &change_set : sorted_changes) {
-            std::cout << "    " << std::setw(64) << std::left << change_set.first << ":";
+            termbuf() << "    " << std::setw(64) << std::left << change_set.first << ":";
             for(const auto &change : change_set.second) {
-                std::cout << " " << change.type;
+                termbuf() << " " << change.type;
             }
-            std::cout << std::endl;
+            termbuf() << std::endl;
         }
     }
 
@@ -270,7 +269,7 @@ namespace fmerge {
     void print_sorted_operations(const SortedOperationSet &sorted_ops) {
         for(const auto &ops : sorted_ops) {
             for(const auto &op : ops.second) {
-                std::cout << "    " << op;
+                termbuf() << "    " << op;
             }
         }
     }

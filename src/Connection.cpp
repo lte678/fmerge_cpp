@@ -1,5 +1,6 @@
 #include "Connection.h"
 
+#include "Terminal.h"
 #include "Errors.h"
 
 #include <sys/socket.h>
@@ -74,7 +75,7 @@ namespace fmerge {
         transmit_lock.unlock();
         response_lock.unlock();
         if(debug_protocol) {
-            std::cout << "[Peer <- Local] Request " << protocol::msg_type_to_string(req->raw_type()) << std::endl;
+            termbuf() << "[Peer <- Local] Request " << protocol::msg_type_to_string(req->raw_type()) << std::endl;
         }
     }
 
@@ -122,14 +123,14 @@ namespace fmerge {
 
                 if(received_packet->is_request()) {
                     if(debug_protocol) {
-                        std::cout << "[Peer -> Local] Request " << protocol::msg_type_to_string(received_header.raw_type) << std::endl;
+                        termbuf() << "[Peer -> Local] Request " << protocol::msg_type_to_string(received_header.raw_type) << std::endl;
                     }
                     // Request message from peer
                     auto response = request_callback(received_packet);
                     if(response) {
                         // Send back the response
                         if(debug_protocol) {
-                            std::cout << "[Peer <- Local] Response " << protocol::msg_type_to_string(response->raw_type()) << std::endl;
+                            termbuf() << "[Peer <- Local] Response " << protocol::msg_type_to_string(response->raw_type()) << std::endl;
                         }
                         // Create a new thread to handle replying
                         join_finished_workers();
@@ -146,7 +147,7 @@ namespace fmerge {
                     }
                 } else {
                     if(debug_protocol) {
-                        std::cout << "[Peer -> Local] Response " << protocol::msg_type_to_string(received_header.raw_type) << std::endl;
+                        termbuf() << "[Peer -> Local] Response " << protocol::msg_type_to_string(received_header.raw_type) << std::endl;
                     }
                     // Response message from peer
                     // Find the callback within the pending responses.
@@ -174,7 +175,7 @@ namespace fmerge {
                 }   
             }
         } catch(const connection_terminated_exception& e) {
-            std::cout << "Exited: " << e.what() << std::endl;
+            termbuf() << "Exited: " << e.what() << std::endl;
             exit(0);
         }
     }

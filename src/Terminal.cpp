@@ -1,45 +1,127 @@
 #include "Terminal.h"
 
-#include <iostream>
 #include <cmath>
-
+#include <cstdlib>
+#include <sys/ioctl.h>
 
 namespace fmerge {
+    std::ostream* _stream;
+    Terminal* _stream_term;
+    Terminal* term() {
+        if(_stream_term == nullptr) {
+            _stream_term = new Terminal(std::cout, std::cin);
+        }
+        return _stream_term;
+    }
+    std::ostream& termbuf() {
+        if(_stream == nullptr) {
+            _stream = new std::ostream(term());
+        }
+        return *_stream;
+    }
+
     constexpr int PROGRESS_BAR_WIDTH = 45; // Does not include trailing percentage
 
-    void print_progress_bar(float progress, std::string trailing) {
+    Terminal::Terminal(std::ostream& _os, std::istream& _is) :
+        os(_os), is(_is) {
+        struct winsize w;
+        if(ioctl(0, TIOCGWINSZ, &w) == -1) {
+            std::cerr << "[Error] Could not fetch terminal width" << std::endl;
+        }
+        terminal_width = w.ws_col;
+    }
+
+    void Terminal::update_progress_bar(float progress, string trailing) {
         // Call repeatedly without printing anything else.
         // Once finished, insert a newline.
         int steps = PROGRESS_BAR_WIDTH - 2;
         int i_progress = std::round(progress * steps);
-        std::cout << "[";
+
+        std::stringstream footer_str{};
+        footer_str << "[";
         for(int i = 1; i < (steps + 1); i++) {
             if(i <= i_progress) {
-                std::cout << "#";
+                footer_str << "#";
             } else {
-                std::cout << " ";
+                footer_str << " ";
             }
         }
-        std::cout << "] " << trailing << " " << std::round(progress * 100.0f) << "%\r" << std::flush;
+        footer_str << "] " << trailing << " " << std::round(progress * 100.0f) << "%";
+        os << footer_str.str() << "\r" << std::flush;
+        persistent_footer = footer_str.str();
+        progress_last_suffix = trailing;
     }
 
-    char prompt_choice(const std::string &options) {
-        std::string response;
+
+    void Terminal::complete_progress_bar() {
+        update_progress_bar(1.0f, progress_last_suffix);
+        os << std::endl;
+        progress_last_suffix.clear();
+        persistent_footer.clear();
+    }
+
+
+    char Terminal::prompt_choice(const string &options) {
+        string response;
         while(true) {
-            std::cout << "[";
+            os << "[";
             for(size_t i = 0; i < options.length(); i++) {
                 if(i != 0) {
-                    std::cout << "/";
+                    os << "/";
                 }
-                std::cout << options[i];
+                os << options[i];
             }
-            std::cout << "] ";
+            os << "] ";
             std::cin >> response;
-            if(response.length() > 1 || (options.find(response[0]) == std::string::npos)) {
-                std::cout << "Invalid option." << std::endl;
+            if(response.length() > 1 || (options.find(response[0]) == string::npos)) {
+                os << "Invalid option." << std::endl;
             } else {
                 return response[0];
             }
+        }
+    }
+
+    void Terminal::print(string printable) {
+        bool contains_trailing_nl = printable.back() == '\n';
+        bool contains_nl = printable.find('\n') != string::npos;
+
+        if(!last_line.empty()) {
+            // Start printing from the previous line, so that we append to it
+            cursor_to_last_line();
+        }
+        // Print and clear any remanents that may be left from the footer
+        os << printable << "\033[K";
+        // Delete the last line buffer if the last line contained a newline
+        if(contains_nl) {
+            last_line.clear();
+        }
+
+        if(!contains_trailing_nl) {
+            os << std::endl;
+            // Put the partial line into the last_line buffer to continue with next time.
+            last_line += printable.substr(printable.find_last_of('\n') + 1);
+        }
+        // Redraw the footer, if applicable
+        if(!persistent_footer.empty()) {
+            os << persistent_footer;
+        }
+    }
+
+
+    int Terminal::sync() {
+        // Put the internal buffer onto the terminal
+        // str() is inherited from stringbuf
+        print(this->str());
+        this->str("");
+        return 0;
+    }
+
+
+    void Terminal::cursor_to_last_line() {
+        if(last_line.length() > 0) {
+            // Only valid for line lengths greater than 1 character
+            int last_line_rows = (last_line.length() - 1) / terminal_width + 1;
+            os << "\033[" << last_line_rows << "F";
         }
     }
 }

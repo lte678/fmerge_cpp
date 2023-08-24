@@ -250,11 +250,11 @@ namespace fmerge {
                     return;
                 }
 
-                num_files_processed++;
                 if(show_loading_bar && (num_files_processed % 100) == 0) {
                     // Go back to previous line
-                    print_progress_bar(static_cast<float>(num_files_processed) / static_cast<float>(total_number_files), "Building File Tree");
+                    term()->update_progress_bar(static_cast<float>(num_files_processed) / static_cast<float>(total_number_files), "Building File Tree");
                 }
+                num_files_processed++;
 
                 auto path_tokens = split_path(file.path);
 
@@ -271,7 +271,7 @@ namespace fmerge {
                     std::cerr << "Parent node is missing for " << path_tokens.back() << std::endl;
                     return;
                 }
-                // std::cout << "Added " << path_tokens.back() << std::endl;
+                // termbuf() << "Added " << path_tokens.back() << std::endl;
 
                 if(file.is_dir()) {
                     auto existing_file = parent_node->get_child_dir(path_tokens.back());
@@ -301,8 +301,7 @@ namespace fmerge {
         );
         
         if(show_loading_bar) {
-            print_progress_bar(1.0f, "Building File Tree");
-            std::cout << std::endl;
+            term()->complete_progress_bar();
         }
     }
 
@@ -343,7 +342,7 @@ namespace fmerge {
                     .file = File{.path=path, .type=to_node->ftype}
                 }};
             } else if(from_node->mtime > to_node->mtime) {
-                std::cout << "[Warning] Modification time of " << path << " lies " << 
+                termbuf() << "[Warning] Modification time of " << path << " lies " << 
                     from_node->mtime - to_node->mtime << "s in the future!" << std::endl;
                 return {};
             } else {
@@ -445,18 +444,17 @@ namespace fmerge {
         size_t changes_count{0};
 
         for(const auto& change : changes) {
-            changes_count++;
             if(show_loading_bar && (changes_count % 500) == 0) {
-                print_progress_bar(static_cast<float>(changes_count) / static_cast<float>(total_changes), "Write Changes");
+                term()->update_progress_bar(static_cast<float>(changes_count) / static_cast<float>(total_changes), "Write Changes");
             }
+            changes_count++;
             change.serialize(stream);
         }
         auto terminator = Change {.type = ChangeType::TerminateList};
         terminator.serialize(stream);
 
         if(show_loading_bar) {
-            print_progress_bar(1.0f, "Write Changes");
-            std::cout << std::endl;
+            term()->complete_progress_bar();
         }
     }
 
@@ -500,7 +498,7 @@ namespace fmerge {
         // Attempt to detect changes
         std::vector<Change> new_changes;
         if(!exists(filetree_file)) {
-            std::cout << "No historical filetree.db containing historical data found. Assuming new folder." << std::endl;
+            termbuf() << "No historical filetree.db containing historical data found. Assuming new folder." << std::endl;
             
             auto blank_node = std::make_shared<DirNode>(split_path(path).back(), FileType::Directory, 0);
             new_changes = compare_trees(blank_node, root_node);

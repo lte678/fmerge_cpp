@@ -17,11 +17,11 @@ namespace fmerge {
     void StateController::run() {
         c->listen([this](auto msg_type) { return handle_request(msg_type); });
 
-        std::cout << "Checking version" << std::endl;
+        termbuf() << "Checking version" << std::endl;
         c->send_request(std::make_shared<protocol::VersionRequest>(), [this](auto msg) { handle_version_response(msg); });
 
         wait_for_state(State::SendTree);
-        std::cout << "Requesting file tree" << std::endl;
+        termbuf() << "Requesting file tree" << std::endl;
         c->send_request(std::make_shared<protocol::ChangesRequest>(), [this](auto msg) { handle_changes_response(msg); });
 
         wait_for_state(State::ResolvingConflicts);
@@ -32,10 +32,10 @@ namespace fmerge {
             return;
         }
         wait_for_state(State::SyncingFiles);
-        std::cout << "Performing file sync. This may take a while..." << std::endl;
+        termbuf() << "Performing file sync. This may take a while..." << std::endl;
         do_sync();
 
-        std::cout << "Waiting for peer to complete" << std::endl;
+        termbuf() << "Waiting for peer to complete" << std::endl;
         wait_for_state(State::Finished);
     }
 
@@ -90,7 +90,7 @@ namespace fmerge {
         if(state == State::SendTree) {
             state_lock.lock();
             peer_changes = changes_msg->changes;
-            std::cout << "Received " << peer_changes.size() << " changes from peer" << std::endl;
+            termbuf() << "Received " << peer_changes.size() << " changes from peer" << std::endl;
             state_lock.unlock();
 
             state = State::ResolvingConflicts;
@@ -150,7 +150,7 @@ namespace fmerge {
 
     void StateController::handle_file_transfer_response(std::shared_ptr<protocol::Message> msg, std::string filepath) {
         auto ft_msg = std::static_pointer_cast<protocol::FileTransferResponse>(msg);
-        //std::cout << "Received " << filepath << " from peer (" << ft_msg->payload_len << " bytes) " << std::endl;
+        //termbuf() << "Received " << filepath << " from peer (" << ft_msg->payload_len << " bytes) " << std::endl;
 
         std::string fullpath = join_path(path, filepath);
 
@@ -158,7 +158,7 @@ namespace fmerge {
         auto path_tokens = split_path(fullpath);
         auto file_folder = join_path("/", path_to_str(std::vector<std::string>(path_tokens.begin(), path_tokens.end() - 1)));
         if(!exists(file_folder)) {
-            //std::cout << "[Warning] Out of order file transfer. Creating folder for file that should already exist." << std::endl;
+            //termbuf() << "[Warning] Out of order file transfer. Creating folder for file that should already exist." << std::endl;
             if(!ensure_dir(file_folder)) {
                 std::cerr << "[Error] Failed to create directory " << file_folder << std::endl;
                 return;
@@ -202,7 +202,7 @@ namespace fmerge {
 
         // print_sorted_changes(sorted_peer_changes);
 
-        // std::cout << "Merging..." << std::endl;
+        // termbuf() << "Merging..." << std::endl;
         // These start out empty by default
         std::unordered_map<std::string, ConflictResolution> resolutions{};
         sorted_local_changes = sort_changes_by_file(read_changes(path));
@@ -212,7 +212,7 @@ namespace fmerge {
         if(conflicts.size() > 0) {
             std::cerr << "!!! Merge conflicts occured for the following paths:" << std::endl;
             for(const auto &conflict : conflicts) { 
-                std::cout << "    " << "CONFLICT  " << conflict.conflict_key << std::endl;
+                termbuf() << "    " << "CONFLICT  " << conflict.conflict_key << std::endl;
             }
             // TODO: Create user interface for conflict resolutions
         } else {
@@ -221,7 +221,7 @@ namespace fmerge {
             pending_changes = merged_sorted_changes;
             state_lock.unlock();
             //print_sorted_changes(merged_sorted_changes);
-            std::cout << "Pending operations:" << std::endl;
+            termbuf() << "Pending operations:" << std::endl;
             print_sorted_operations(operations);
             state = SyncUserWait;
         }
@@ -234,7 +234,7 @@ namespace fmerge {
         // This is probably too strict of a lock
         for(const auto& file_ops : pending_operations) {
             if(processed_change_count % 250 == 0) {
-                print_progress_bar(static_cast<float>(processed_change_count) / static_cast<float>(pending_operations.size()), "Syncing");
+                term()->update_progress_bar(static_cast<float>(processed_change_count) / static_cast<float>(pending_operations.size()), "Syncing");
             }
             
             // For us to accurately reproduce the new file history, all operations
@@ -270,16 +270,15 @@ namespace fmerge {
         }
         state_lock.unlock();
 
-        print_progress_bar(1.0f, "Syncing");
-        std::cout << std::endl;
+        term()->complete_progress_bar();
 
         // This creates duplicates once we also update the filetree on-disk structure at the next execution
         //write_changes(path, recombine_changes_by_file(sorted_local_changes));
-        std::cout << "Saved changes to disk" << std::endl;
+        termbuf() << "Saved changes to disk" << std::endl;
     }
 
     bool StateController::ask_proceed() {
-        char response = prompt_choice("yn");
+        char response = term()->prompt_choice("yn");
         if(response == 'y') {
             c->send_request(std::make_shared<protocol::StartSyncRequest>(),
                 [this](auto) {
@@ -289,7 +288,7 @@ namespace fmerge {
                 });
             return true;
         }
-        std::cout << "Exiting." << std::endl;
+        termbuf() << "Exiting." << std::endl;
         return false;
     }
 
