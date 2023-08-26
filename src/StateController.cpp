@@ -1,6 +1,7 @@
 #include "StateController.h"
 
 #include "NetProtocol.h"
+#include "ConflictResolver.h"
 #include "Errors.h"
 #include "Version.h"
 #include "Terminal.h"
@@ -206,24 +207,29 @@ namespace fmerge {
         // These start out empty by default
         std::unordered_map<std::string, ConflictResolution> resolutions{};
         sorted_local_changes = sort_changes_by_file(read_changes(path));
-        auto [merged_sorted_changes, operations, conflicts] = merge_change_sets(sorted_local_changes, sorted_peer_changes, resolutions);
         state_lock.unlock();
+        
+        while(true) {
+            auto [merged_sorted_changes, operations, conflicts] = merge_change_sets(sorted_local_changes, sorted_peer_changes, resolutions);
 
-        if(conflicts.size() > 0) {
-            std::cerr << "!!! Merge conflicts occured for the following paths:" << std::endl;
-            for(const auto &conflict : conflicts) { 
-                termbuf() << "    " << "CONFLICT  " << conflict.conflict_key << std::endl;
+            if(conflicts.size() > 0) {
+                std::cerr << "!!! Merge conflicts occured for the following paths:" << std::endl;
+                for(const auto &conflict : conflicts) { 
+                    termbuf() << "    " << "CONFLICT  " << conflict.conflict_key << std::endl;
+                }
+            
+                resolutions = ask_for_resolutions(conflicts, sorted_local_changes, sorted_peer_changes);
+            } else {
+                state_lock.lock();
+                pending_operations = operations;
+                pending_changes = merged_sorted_changes;
+                state_lock.unlock();
+                //print_sorted_changes(merged_sorted_changes);
+                termbuf() << "Pending operations:" << std::endl;
+                print_sorted_operations(operations);
+                state = SyncUserWait;
+                return;
             }
-            // TODO: Create user interface for conflict resolutions
-        } else {
-            state_lock.lock();
-            pending_operations = operations;
-            pending_changes = merged_sorted_changes;
-            state_lock.unlock();
-            //print_sorted_changes(merged_sorted_changes);
-            termbuf() << "Pending operations:" << std::endl;
-            print_sorted_operations(operations);
-            state = SyncUserWait;
         }
     }
 
