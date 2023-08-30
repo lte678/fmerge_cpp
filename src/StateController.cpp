@@ -1,6 +1,5 @@
 #include "StateController.h"
 
-#include "NetProtocol.h"
 #include "ConflictResolver.h"
 #include "Errors.h"
 #include "Version.h"
@@ -16,7 +15,7 @@ namespace fmerge {
     }
 
     void StateController::run() {
-        c->listen([this](auto msg_type) { return handle_request(msg_type); });
+        c-> ([this](auto msg_type) { return handle_request(msg_type); });
 
         termbuf() << "Checking version" << std::endl;
         c->send_request(std::make_shared<protocol::VersionRequest>(), [this](auto msg) { handle_version_response(msg); });
@@ -50,6 +49,8 @@ namespace fmerge {
             return handle_file_transfer_request(msg);
         } else if(msg->type() == protocol::MsgStartSync) {
             return handle_start_sync_request();
+        } else if(msg->type() == protocol::MsgConflictResolutions) {
+            return handle_resolutions_request();
         }
         // Error message is handled caller function
         return nullptr;
@@ -148,6 +149,14 @@ namespace fmerge {
         return std::make_shared<protocol::StartSyncResponse>();
     }
 
+    std::shared_ptr<protocol::Message> StateController::handle_resolutions_request() {
+        wait_for_state(State::SyncUserWait);
+        // Now the resolutions are valid
+        if(resolutions.size() == 0) {
+            std::cout << "Peer is attempting to resolve conflicts, but we found none! State is out of sync!" << std::endl;
+        }
+        return std::make_shared<protocol::ConflictResolutionsResponse>(resolutions);
+    }
 
     void StateController::handle_file_transfer_response(std::shared_ptr<protocol::Message> msg, std::string filepath) {
         auto ft_msg = std::static_pointer_cast<protocol::FileTransferResponse>(msg);
@@ -196,6 +205,16 @@ namespace fmerge {
     }
 
 
+    void StateController::handle_resolutions_response(std::shared_ptr<protocol::Message> msg) {
+        auto resolutions_msg = std::static_pointer_cast<protocol::ConflictResolutionsResponse>(msg);
+        termbuf() << "Received conflict resolutions from peer:" << std::endl;
+        for(const auto& resolution : resolutions_msg->resolutions) {
+            termbuf() << "    " << resolution.first << ":" << resolution.second << std::endl;
+        }
+        termbuf() << "TODO: Interrupt ask for resolutions!" << std::endl;
+    }
+
+
     void StateController::do_merge() {
         state = ResolvingConflicts;
         state_lock.lock();
@@ -204,8 +223,6 @@ namespace fmerge {
         // print_sorted_changes(sorted_peer_changes);
 
         // termbuf() << "Merging..." << std::endl;
-        // These start out empty by default
-        std::unordered_map<std::string, ConflictResolution> resolutions{};
         sorted_local_changes = sort_changes_by_file(read_changes(path));
         state_lock.unlock();
         
@@ -218,12 +235,19 @@ namespace fmerge {
                     termbuf() << "    " << "CONFLICT  " << conflict.conflict_key << std::endl;
                 }
             
+                c->send_request(std::make_shared<protocol::ConflictResolutionsRequest>(), [this](auto msg) { handle_resolutions_response(msg); });
                 resolutions = ask_for_resolutions(conflicts, sorted_local_changes, sorted_peer_changes);
             } else {
                 state_lock.lock();
                 pending_operations = operations;
                 pending_changes = merged_sorted_changes;
                 state_lock.unlock();
+
+                // Forward the now valid list of resolutions to the remote
+                if(resolutions.size() > 0) {
+                    
+                }
+
                 //print_sorted_changes(merged_sorted_changes);
                 termbuf() << "Pending operations:" << std::endl;
                 print_sorted_operations(operations);

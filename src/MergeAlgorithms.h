@@ -49,6 +49,27 @@ namespace fmerge {
     };
 
 
+    inline std::ostream& operator<<(std::ostream& os, const ConflictResolution& res) { 
+        if(res == ConflictResolution::KeepLocal) {
+            os << "KeepLocal";
+        } else if(res == ConflictResolution::KeepRemote) {
+            os << "KeepRemote";
+        } else {
+            os << "ERROR";
+        }
+        return os;
+    }
+
+
+    inline void serialize_conflict_resolution(std::ostream& os, const std::pair<std::string, ConflictResolution>& res) {
+        unsigned short str_length_le = htole16(static_cast<unsigned short>(res.first.length()));
+        os.write(reinterpret_cast<const char*>(&str_length_le), sizeof(str_length_le));
+        os.write(res.first.c_str(), res.first.length());
+        int res_choice_le = htole32(static_cast<int>(res.second));
+        os.write(reinterpret_cast<const char*>(&res_choice_le), sizeof(res_choice_le));
+    }
+
+
     struct Conflict {
         Conflict(std::string _conflict_key) : conflict_key(_conflict_key) {};
 

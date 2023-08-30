@@ -2,7 +2,7 @@
 
 #include "Config.h"
 #include "Connection.h"
-#include "NetProtocol.h"
+#include "protocol/NetProtocol.h"
 #include "MergeAlgorithms.h"
 
 #include <thread>
@@ -35,9 +35,11 @@ namespace fmerge {
         std::shared_ptr<protocol::Message> handle_changes_request(std::shared_ptr<protocol::Message>);
         std::shared_ptr<protocol::Message> handle_file_transfer_request(std::shared_ptr<protocol::Message> msg);
         std::shared_ptr<protocol::Message> handle_start_sync_request();
+        std::shared_ptr<protocol::Message> handle_resolutions_request();
         void handle_version_response(std::shared_ptr<protocol::Message> msg);
         void handle_changes_response(std::shared_ptr<protocol::Message> msg);
         void handle_file_transfer_response(std::shared_ptr<protocol::Message> msg, std::string filepath);
+        void handle_resolutions_response(std::shared_ptr<protocol::Message> msg);
 
         void do_merge();
         void do_sync();
@@ -59,6 +61,9 @@ namespace fmerge {
         // Each operation also has changes associated with it
         SortedOperationSet pending_operations;
         SortedChangeSet pending_changes;
+
+        // These start out empty for the first pass
+        std::unordered_map<std::string, ConflictResolution> resolutions;
 
         std::thread listener_thread_handle;
     };

@@ -2,6 +2,7 @@
 
 #include "Terminal.h"
 #include "Errors.h"
+#include "protocol/NetProtocolRegistry.h"
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -14,11 +15,8 @@
 namespace fmerge {
 
     void MessageHeader::serialize(protocol::WriteFunc write) const {
-        unsigned short nettype = htole16(static_cast<unsigned short>(raw_type));
+        unsigned short nettype = htole16(static_cast<unsigned short>(type));
         write(&nettype, sizeof(nettype));
-
-        unsigned short netindex = htole16(static_cast<unsigned short>(index));
-        write(&netindex, sizeof(netindex));
 
         unsigned long netlength = htole64(static_cast<unsigned int>(length));
         write(&netlength, sizeof(netlength));
@@ -28,17 +26,13 @@ namespace fmerge {
     MessageHeader MessageHeader::deserialize(protocol::ReadFunc receive) {
         unsigned short nettype{};
         receive(&nettype, sizeof(nettype));
-        unsigned short type = static_cast<protocol::MessageType>(le16toh(nettype));
-
-        unsigned short netindex{};
-        receive(&netindex, sizeof(netindex));
-        unsigned short index = le16toh(netindex);
+        protocol::MsgType type = static_cast<protocol::MsgType>(le16toh(nettype));
 
         unsigned long netlength{};
         receive(&netlength, sizeof(netlength));
         unsigned long length = le64toh(netlength);
 
-        return MessageHeader(type, length, index);
+        return MessageHeader(type, length);
     }
 
 
@@ -49,33 +43,18 @@ namespace fmerge {
         }
     }
 
-    void Connection::send_request(std::shared_ptr<protocol::Message> req , ResponseCallback response_callback) {
+
+    void Connection::send_message(std::shared_ptr<protocol::GenericMessage> msg) {
         // This function is thread safe
-        if(!req->is_request()) {
-            std::cerr << "[Error] send_request received a non-request message!" << std::endl;
-            return;
-        }
 
-        transmission_idx current_index = message_index.fetch_add(1); 
-        // Note down our message index and the callback we should call once we receive a 
-        // response
-
-        while(resp_handler_worker_count >= MAX_RESPONCE_WORKERS) {
-            // We will be spending a lot of time here. We should not be using a busy lock, since it will limit us to 100 ops per second.
-            // std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-
-        std::lock(transmit_lock, response_lock);
-        pending_responses.push_back({.index = current_index, .type = req->type(), .callback = response_callback});
-        resp_handler_worker_count++;
+        transmit_lock.lock();
         // Now send header-only request message
         auto send_func = [this](auto buf, auto len) { send(buf, len); };
-        MessageHeader(req, current_index).serialize(send_func);
-        req->serialize(send_func);
+        MessageHeader(msg).serialize(send_func);
+        msg->serialize(send_func);
         transmit_lock.unlock();
-        response_lock.unlock();
         if(debug_protocol) {
-            termbuf() << "[Peer <- Local] Request " << protocol::msg_type_to_string(req->raw_type()) << std::endl;
+            termbuf() << "[Peer <- Local] Sending " << msg->type() << std::endl;
         }
     }
 
@@ -90,24 +69,15 @@ namespace fmerge {
                 worker_it++;
             }
         }
-        worker_it = req_handler_workers.begin();
-        while(worker_it != req_handler_workers.end()) {
-            if(worker_it->joinable()) {
-                worker_it->join();
-                worker_it = req_handler_workers.erase(worker_it);
-            } else {
-                worker_it++;
-            }
-        }
     }
 
 
-    void Connection::listen(RequestCallback request_callback) {
-        listener_thread_handle = std::thread([=]() { listener_thread(request_callback); });
+    void Connection::listen(ReceiveCallback callback) {
+        listener_thread_handle = std::thread([=]() { listener_thread(callback); });
     }
 
 
-    void Connection::listener_thread(RequestCallback request_callback) {
+    void Connection::listener_thread(ReceiveCallback callback) {
         // To prevent the application from locking up, this thread must always return back to a state of listening
         // without any blocking writes. Otherwise the two clients can deadlock.
         //
@@ -119,60 +89,22 @@ namespace fmerge {
             while(true) {
                 auto receive_func = [this](auto buf, auto len) { receive(buf, len); };
                 auto received_header = MessageHeader::deserialize(receive_func);
-                auto received_packet = protocol::deserialize_packet(received_header.raw_type, received_header.length, receive_func);
+                auto received_packet = protocol::deserialize_packet(received_header.type, received_header.length, receive_func);
 
-                if(received_packet->is_request()) {
-                    if(debug_protocol) {
-                        termbuf() << "[Peer -> Local] Request " << protocol::msg_type_to_string(received_header.raw_type) << std::endl;
-                    }
-                    // Request message from peer
-                    auto response = request_callback(received_packet);
-                    if(response) {
-                        // Send back the response
-                        if(debug_protocol) {
-                            termbuf() << "[Peer <- Local] Response " << protocol::msg_type_to_string(response->raw_type()) << std::endl;
-                        }
-                        // Create a new thread to handle replying
-                        join_finished_workers();
-                        req_handler_workers.push_back(std::thread{ [this, response, received_header]() {
-                            auto send_func = [this](auto buf, auto len) { send(buf, len); };
-                            transmit_lock.lock();
-                            MessageHeader(response, received_header.index).serialize(send_func);
-                            response->serialize(send_func);
-                            transmit_lock.unlock();
-                        }});
-
-                    } else {
-                        std::cerr << "Error: Cannot send response for " << protocol::msg_type_to_string(received_header.raw_type) << " request" << std::endl;
-                    }
-                } else {
-                    if(debug_protocol) {
-                        termbuf() << "[Peer -> Local] Response " << protocol::msg_type_to_string(received_header.raw_type) << std::endl;
-                    }
-                    // Response message from peer
-                    // Find the callback within the pending responses.
-                    response_lock.lock();
-                    ResponseCallback resp_callback;
-                    for(auto pending_it = pending_responses.begin(); pending_it != pending_responses.end(); pending_it++) {
-                        if(pending_it->index == received_header.index) {
-                            // We found the request this response fulfills
-                            if(received_header.raw_type == pending_it->type) {
-                                // Copy callback
-                                resp_callback = pending_it->callback;
-                            } else {
-                                // Delete the pending response object
-                                std::cerr << "Receive message type " << protocol::msg_type_to_string(received_header.raw_type) << " is invalid with request (" << protocol::msg_type_to_string(pending_it->type) << ")" << std::endl;
-                            }
-                            pending_responses.erase(pending_it);
-                            break;
-                        }
-                    }
-                    response_lock.unlock();
-
-                    // Call the callback outside of response_lock, since it may invoke another transmission.
-                    join_finished_workers(); // Try joining any finished processes
-                    resp_handler_workers.push_back(std::thread{ [this, resp_callback, received_packet]() { resp_callback(received_packet); resp_handler_worker_count--; } });
-                }   
+                if(debug_protocol) {
+                    termbuf() << "[Peer -> Local] Received " << received_header.type << std::endl;
+                }
+                // Received message from peer
+                join_finished_workers(); // Try joining any finished processes
+                // Wait until worker thread is available
+                while(resp_handler_worker_count >= MAX_WORKERS) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                }
+                // Create worker thread
+                resp_handler_workers.push_back(std::thread{ 
+                    [this, callback, received_packet]()
+                        { callback(received_packet); resp_handler_worker_count--; } 
+                });
             }
         } catch(const connection_terminated_exception& e) {
             termbuf() << "Exited: " << e.what() << std::endl;
