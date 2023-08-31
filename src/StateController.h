@@ -30,21 +30,27 @@ namespace fmerge {
 
         void run();
     private:
-        std::shared_ptr<protocol::Message> handle_request(std::shared_ptr<protocol::Message> msg);
-        std::shared_ptr<protocol::Message> handle_version_request(std::shared_ptr<protocol::Message>);
-        std::shared_ptr<protocol::Message> handle_changes_request(std::shared_ptr<protocol::Message>);
-        std::shared_ptr<protocol::Message> handle_file_transfer_request(std::shared_ptr<protocol::Message> msg);
-        std::shared_ptr<protocol::Message> handle_start_sync_request();
-        std::shared_ptr<protocol::Message> handle_resolutions_request();
-        void handle_version_response(std::shared_ptr<protocol::Message> msg);
-        void handle_changes_response(std::shared_ptr<protocol::Message> msg);
-        void handle_file_transfer_response(std::shared_ptr<protocol::Message> msg, std::string filepath);
-        void handle_resolutions_response(std::shared_ptr<protocol::Message> msg);
+        // Protocol message handling functions
+        void handle_message(std::shared_ptr<protocol::GenericMessage> msg);
 
+        void handle_version_message(std::shared_ptr<protocol::VersionMessage> msg);
+        void handle_changes_message(std::shared_ptr<protocol::ChangesMessage> msg);
+        void handle_start_sync_message(std::shared_ptr<protocol::StartSyncMessage> msg);
+        void handle_file_transfer_message(std::shared_ptr<protocol::FileTransferMessage> msg);
+        void handle_file_request_message(std::shared_ptr<protocol::FileRequestMessage> msg);
+        void handle_resolutions_message(std::shared_ptr<protocol::ConflictResolutionsMessage> msg);
+
+        // Message handling helper functions
+        std::shared_ptr<protocol::FileTransferMessage> create_file_transfer_message(std::string path);
+
+        // State machine steps
+        void send_version();
+        void send_filetree();
         void do_merge();
         void do_sync();
         bool ask_proceed();
 
+        // Wait for the next state to be activated asynchronously, usually by completion of a thread or peer message
         void wait_for_state(State target_state);
 
         // Cross-thread state

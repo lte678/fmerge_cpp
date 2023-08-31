@@ -15,11 +15,6 @@ namespace fmerge::protocol {
     };
 
 
-    inline std::ostream& operator<<(std::ostream& os, const MsgType& msg) {
-        return os << lookup_protocol_registry(msg).string_representation;
-    }
-
-
     // NOTE: Must contain an MsgType::Unknown field for lookup_protocol_registry to return
     constexpr MsgEntry protocol_registry[] = {
         {MsgType::Unknown,             "UNKNOWN"            , IgnoreMessage::deserialize             },
@@ -27,6 +22,7 @@ namespace fmerge::protocol {
         {MsgType::Version,             "VERSION"            , VersionMessage::deserialize            },
         {MsgType::Changes,             "CHANGES"            , ChangesMessage::deserialize            },
         {MsgType::FileTransfer,        "FILE_TRANSFER"      , FileTransferMessage::deserialize       },
+        {MsgType::FileRequest,         "FILE_REQUEST"       , FileRequestMessage::deserialize        },
         {MsgType::StartSync,           "START_SYNC"         , StartSyncMessage::deserialize          },
         {MsgType::ConflictResolutions, "CONFLICT_RESOLUTION", ConflictResolutionsMessage::deserialize},
     };
@@ -50,4 +46,8 @@ namespace fmerge::protocol {
         return msg_entry.deserialize_function(receive, length);
     }
 
+
+    inline std::ostream& operator<<(std::ostream& os, const MsgType& msg) {
+        return os << lookup_protocol_registry(msg).string_representation;
+    }
 }

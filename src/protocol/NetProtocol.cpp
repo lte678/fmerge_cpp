@@ -22,86 +22,105 @@ namespace fmerge::protocol {
     // }
     
 
-    // void VersionResponse::serialize(WriteFunc write) const {
-    //     // Note:: Serialize adds the header, while deserialize does not expect it!
-    //     unsigned int netmajor = htole32(major);
-    //     write(&netmajor, sizeof(netmajor));
-    //     unsigned int netminor = htole32(minor);
-    //     write(&netminor, sizeof(netminor));
+    void VersionPayload::serialize(WriteFunc write) const {
+        unsigned int netmajor = htole32(major);
+        write(&netmajor, sizeof(netmajor));
+        unsigned int netminor = htole32(minor);
+        write(&netminor, sizeof(netminor));
 
-    //     write(uuid.data(), uuid.size());
-    // }
-
-
-    // VersionResponse VersionResponse::deserialize(ReadFunc receive) {
-    //     unsigned int major{};
-    //     receive(&major, sizeof(major));
-    //     major = le32toh(major);
-    //     unsigned int minor{};
-    //     receive(&minor, sizeof(minor));
-    //     minor = le32toh(minor);
-
-    //     std::array<unsigned char, 16> uuid;
-    //     receive(uuid.data(), uuid.size());
-
-    //     return VersionResponse(major, minor, uuid);
-    // }
+        write(uuid.data(), uuid.size());
+    }
 
 
-    // ChangesResponse::ChangesResponse(std::vector<Change> _changes) : changes(_changes), serialized_changes("") {
-    //     std::stringstream ser_stream;
-    //     serialize_changes(ser_stream, changes);
-    //     serialized_changes = ser_stream.str();
-    // }
+    std::unique_ptr<VersionPayload> VersionPayload::deserialize(ReadFunc receive, unsigned long) {
+        unsigned int major{};
+        receive(&major, sizeof(major));
+        major = le32toh(major);
+        unsigned int minor{};
+        receive(&minor, sizeof(minor));
+        minor = le32toh(minor);
+
+        std::array<unsigned char, 16> uuid;
+        receive(uuid.data(), uuid.size());
+
+        return std::make_unique<VersionPayload>(major, minor, uuid);
+    }
+
+    void ChangesPayload::serialize(WriteFunc write) const {
+        std::stringstream ser_stream;
+        serialize_changes(ser_stream, *this);
+        auto serialized_changes = ser_stream.str();
+        write(serialized_changes.c_str(), serialized_changes.length());
+    }
 
 
-    // void ChangesResponse::serialize(WriteFunc write) const {
-    //     write(serialized_changes.c_str(), length());
-    // }
+    std::unique_ptr<ChangesPayload> ChangesPayload::deserialize(ReadFunc receive, unsigned long length) {
+        char *change_buffer = new char[length];
+        receive(change_buffer, length);
+
+        std::stringstream change_stream(change_buffer);
+        auto changes = deserialize_changes(change_stream);
+        return std::make_unique<ChangesPayload>(changes.begin(), changes.end());
+    }
 
 
-    // ChangesResponse ChangesResponse::deserialize(ReadFunc receive, unsigned long length) {
-    //     char *change_buffer = new char[length];
-    //     receive(change_buffer, length);
+    void FileTransferPayload::serialize(WriteFunc write) const {
+        long mtime_le = htole64(mod_time);
+        write(&mtime_le, sizeof(mtime_le));
 
-    //     std::stringstream change_stream(change_buffer);
-    //     auto changes = deserialize_changes(change_stream);
-    //     return ChangesResponse(changes);
-    // }
+        long atime_le = htole64(access_time);
+        write(&atime_le, sizeof(atime_le));
 
+        auto ftype_char = static_cast<unsigned char>(ftype);
+        write(&ftype_char, sizeof(ftype_char));
 
-    // void FileTransferResponse::serialize(WriteFunc write) const {
-    //     long mtime_le = htole64(modification_time);
-    //     write(&mtime_le, sizeof(mtime_le));
+        long path_length = htole16(static_cast<unsigned short>(path.length()));
+        write(&path_length, sizeof(path_length));
+        write(path.c_str(), path.length());
 
-    //     long atime_le = htole64(access_time);
-    //     write(&atime_le, sizeof(atime_le));
-
-    //     auto ftype_char = static_cast<unsigned char>(ftype);
-    //     write(&ftype_char, sizeof(ftype_char));
-
-    //     write(payload.get(), payload_len);
-    // }
+        write(payload.get(), payload_len);
+    }
 
 
-    // FileTransferResponse FileTransferResponse::deserialize(ReadFunc receive, unsigned long length) {
-    //     long mtime{};
-    //     receive(&mtime, sizeof(mtime));
-    //     mtime = le64toh(mtime);
+    std::unique_ptr<FileTransferPayload> FileTransferPayload::deserialize(ReadFunc receive, unsigned long length) {
+        long mtime{};
+        receive(&mtime, sizeof(mtime));
+        mtime = le64toh(mtime);
 
-    //     long atime{};
-    //     receive(&atime, sizeof(atime));
-    //     atime = le64toh(atime);
+        long atime{};
+        receive(&atime, sizeof(atime));
+        atime = le64toh(atime);
 
-    //     unsigned char ftype_char{};
-    //     receive(&ftype_char, sizeof(ftype_char));
+        unsigned char ftype_char{};
+        receive(&ftype_char, sizeof(ftype_char));
 
-    //     unsigned long payload_len = length - sizeof(mtime) - sizeof(atime) - sizeof(ftype_char);
-    //     std::shared_ptr<unsigned char> resp_buffer{(unsigned char*)malloc(payload_len), free};
-    //     receive(resp_buffer.get(), payload_len);
-    //     return FileTransferResponse(resp_buffer, payload_len, static_cast<FileType>(ftype_char), mtime, atime);
-    // }
+        unsigned short path_length{};
+        receive(&path_length, sizeof(path_length));
+        path_length = le16toh(path_length);
 
+        char cpath[path_length + 1];
+        receive(cpath, path_length);
+        cpath[path_length] = '\0';
+        std::string path(cpath);
+
+        unsigned long payload_len = length - sizeof(mtime) - sizeof(atime) - sizeof(ftype_char) - sizeof(path_length) - path_length;
+        std::shared_ptr<unsigned char> resp_buffer{(unsigned char*)malloc(payload_len), free};
+        receive(resp_buffer.get(), payload_len);
+        return std::make_unique<FileTransferPayload>(path, resp_buffer, payload_len, static_cast<FileType>(ftype_char), mtime, atime);
+    }
+
+
+    void StringPayload::serialize(WriteFunc write) const {
+        write(c_str(), length());
+    }
+
+
+    std::unique_ptr<StringPayload> StringPayload::deserialize(ReadFunc receive, unsigned long length) {
+        char cstr[length + 1];
+        receive(cstr, length);
+        cstr[length] = '\0';
+        return std::unique_ptr<StringPayload>(new StringPayload(cstr));
+    }
 
     // ConflictResolutionsResponse::ConflictResolutionsResponse(std::unordered_map<std::string, ConflictResolution> _resolutions)
     //     : resolutions(_resolutions) {
