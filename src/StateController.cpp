@@ -71,7 +71,7 @@ namespace fmerge {
             return;
         }
         c->send_message(
-            std::make_shared<VersionMessage>(VersionPayload{.major=MAJOR_VERSION, .minor=MINOR_VERSION, .uuid=uuid})
+            std::make_shared<VersionMessage>(std::make_unique<VersionPayload>(MAJOR_VERSION, MINOR_VERSION, uuid))
         );
     }
 
@@ -115,36 +115,34 @@ namespace fmerge {
         auto fstats = get_file_stats(file_fullpath);
         if(!fstats.has_value()) {
             std::cerr << "[Error] Peer requested a file that does not exist! (" << ft_payload << ")" << std::endl;
-            return std::make_shared<FileTransferMessage>(ft_payload);
+            return std::make_shared<FileTransferMessage>(std::make_unique<FileTransferPayload>(ft_payload));
         }
 
         if(fstats->type == FileType::Directory) {
             // Return an empty response. The host does not require any extra data to create a folder.
-            return std::make_shared<FileTransferMessage>(ft_payload, nullptr, *fstats);
+            return std::make_shared<FileTransferMessage>(std::make_unique<FileTransferPayload>(ft_payload, nullptr, *fstats));
         } else if(fstats->type == FileType::File) {
             std::ifstream filestream(file_fullpath, std::ifstream::binary);
             std::shared_ptr<unsigned char> file_buffer((unsigned char*)malloc(fstats->fsize), free);
             if(file_buffer == nullptr) {
                 std::cerr << "[Error] Reached memory allocation limit for file " << ft_payload << std::endl;
-                return std::make_shared<FileTransferMessage>();
+                return std::make_shared<FileTransferMessage>(std::make_unique<FileTransferPayload>(ft_payload));
             }
             filestream.read(reinterpret_cast<char*>(file_buffer.get()), fstats->fsize);
             if(!filestream) {
                 std::cerr << "[Error] Failed to read data for " << ft_payload << std::endl;
             }
-            return std::make_shared<FileTransferMessage>(file_buffer, fstats->fsize, *fstats);
+            return std::make_shared<FileTransferMessage>(std::make_unique<FileTransferPayload>(ft_payload, file_buffer, *fstats));
         } else if(fstats->type == FileType::Link) {
-            std::shared_ptr<unsigned char> link_buffer((unsigned char*)malloc(fstats->fsize + 1), free);
+            std::shared_ptr<unsigned char> link_buffer((unsigned char*)malloc(fstats->fsize), free);
             if(readlink(file_fullpath.c_str(), reinterpret_cast<char*>(link_buffer.get()), fstats->fsize) == -1) {
                 print_clib_error("readlink");
-                return std::make_shared<FileTransferMessage>(ft_payload);
+                return std::make_shared<FileTransferMessage>(std::make_unique<FileTransferPayload>(ft_payload));
             }
-            // Null terminate string
-            link_buffer.get()[fstats->fsize] = 0;
-            return std::make_shared<FileTransferMessage>(link_buffer, fstats->fsize + 1, *fstats);
+            return std::make_shared<FileTransferMessage>(std::make_unique<FileTransferPayload>(ft_payload, link_buffer, *fstats));
         } else {
             std::cerr << "[Error] Failed to process unidentifiable item at path '" << file_fullpath << "'." << std::endl;
-            return std::make_shared<FileTransferMessage>(ft_payload);
+            return std::make_shared<FileTransferMessage>(std::make_unique<FileTransferPayload>(ft_payload));
         }
     }
 
@@ -189,7 +187,11 @@ namespace fmerge {
             }
         } else if(ft_payload.ftype == FileType::Link) {
             // Create symlink
-            if(symlink(reinterpret_cast<char*>(ft_payload.payload.get()), fullpath.c_str()) == -1) {
+            // Warning: Payload is not null-terminated
+            char symlink_contents[ft_payload.payload_len + 1];
+            memcpy(symlink_contents, ft_payload.payload.get(), ft_payload.payload_len);
+            symlink_contents[ft_payload.payload_len] = '\0';
+            if(symlink(symlink_contents, fullpath.c_str()) == -1) {
                 print_clib_error("symlink");
                 return;
             }

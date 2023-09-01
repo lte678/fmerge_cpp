@@ -11,6 +11,10 @@
 
 namespace fmerge::protocol {
     
+    // --------------------------------------------------------------------------------
+    // ---------------------------- Payload Definitions -------------------------------
+    // --------------------------------------------------------------------------------
+
     struct VersionPayload {
         VersionPayload(int _major, int _minor, std::array<unsigned char, 16> _uuid) :
             major(_major), minor(_minor), uuid(_uuid) {}
@@ -26,6 +30,7 @@ namespace fmerge::protocol {
 
     struct ChangesPayload : public std::vector<Change> {
         using std::vector<Change>::vector;
+        ChangesPayload(std::vector<Change> _other) : std::vector<Change>(_other) {}
 
         void serialize(WriteFunc write) const;
         static std::unique_ptr<ChangesPayload> deserialize(ReadFunc receive, unsigned long length);
@@ -60,6 +65,7 @@ namespace fmerge::protocol {
 
     struct StringPayload : public std::string {
         using std::string::string;
+        StringPayload(std::string _other) : std::string(_other) {}
 
         void serialize(WriteFunc write) const;
         static std::unique_ptr<StringPayload> deserialize(ReadFunc receive, unsigned long length);
@@ -68,6 +74,8 @@ namespace fmerge::protocol {
 
     struct ConflictResolutionPayload : public std::unordered_map<std::string, ConflictResolution> {
         using std::unordered_map<std::string, ConflictResolution>::unordered_map;
+        ConflictResolutionPayload(std::unordered_map<std::string, ConflictResolution> _other) :
+            std::unordered_map<std::string, ConflictResolution>(_other) {}
 
         void serialize(WriteFunc write) const;
         static std::unique_ptr<ConflictResolutionPayload> deserialize(ReadFunc receive, unsigned long length);
@@ -80,11 +88,8 @@ namespace fmerge::protocol {
 
     class IgnoreMessage : public EmptyMessage {
     public:
+        using EmptyMessage::EmptyMessage;
         MsgType type() const override { return MsgType::Ignore; }
-
-        static std::shared_ptr<GenericMessage> deserialize(ReadFunc, unsigned long) {
-            return std::make_shared<IgnoreMessage>();
-        }
     };
 
 
@@ -121,11 +126,8 @@ namespace fmerge::protocol {
 
     class StartSyncMessage : public EmptyMessage {
     public:
+    using EmptyMessage::EmptyMessage;
         MsgType type() const override { return MsgType::StartSync; }
-
-        static std::shared_ptr<GenericMessage> deserialize(ReadFunc, unsigned long) {
-            return std::make_shared<StartSyncMessage>();
-        }
     };
 
 

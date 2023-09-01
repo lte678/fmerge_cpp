@@ -6,21 +6,6 @@
 
 
 namespace fmerge::protocol {
-    // void FileTransferRequest::serialize(WriteFunc write) const {
-    //     write(filepath.c_str(), filepath.length());
-    // }
-
-
-    // FileTransferRequest FileTransferRequest::deserialize(ReadFunc receive, unsigned long length) {
-    //     char* c_filename = new char[length + 1];
-    //     receive(c_filename, length);
-    //     c_filename[length] = 0;
-    //     std::string filename{c_filename};
-    //     delete[] c_filename;
-
-    //     return FileTransferRequest(filename);
-    // }
-    
 
     void VersionPayload::serialize(WriteFunc write) const {
         unsigned int netmajor = htole32(major);
@@ -122,64 +107,31 @@ namespace fmerge::protocol {
         return std::unique_ptr<StringPayload>(new StringPayload(cstr));
     }
 
-    // ConflictResolutionsResponse::ConflictResolutionsResponse(std::unordered_map<std::string, ConflictResolution> _resolutions)
-    //     : resolutions(_resolutions) {
-    //     std::stringstream res_stream{};
-    //     for(const auto& resolution : resolutions) {
-    //         serialize_conflict_resolution(res_stream, resolution);
-    //     }
-    //     serialized = res_stream.str();
-    // }
+
+    void ConflictResolutionPayload::serialize(WriteFunc write) const {
+        std::stringstream res_stream{};
+        for(const auto& resolution : *this) {
+            serialize_conflict_resolution(res_stream, resolution);
+        }
+        write(res_stream.str().c_str(), res_stream.str().length());
+    }
 
 
-    // void ConflictResolutionsResponse::serialize(WriteFunc write) const {
-    //     write(serialized.c_str(), length());
-    // }
+    std::unique_ptr<ConflictResolutionPayload> ConflictResolutionPayload::deserialize(ReadFunc receive, unsigned long length) {
+        auto resolutions = new ConflictResolutionPayload;
+        unsigned long bytes_read{0};
+        while(bytes_read < length) {
+            unsigned short string_len_le;
+            receive(&string_len_le, sizeof(string_len_le));
+            char resolution_key[le16toh(string_len_le) + 1];
+            receive(resolution_key, le16toh(string_len_le));
+            resolution_key[le16toh(string_len_le)] = '\0';
+            int resolution_choice_le;
+            receive(&resolution_choice_le, sizeof(resolution_choice_le));
 
+            resolutions->emplace(std::string(resolution_key), static_cast<ConflictResolution>(le32toh(resolution_choice_le)));
+        }
+        return std::unique_ptr<ConflictResolutionPayload>(resolutions);
+    }
 
-    // ConflictResolutionsResponse ConflictResolutionsResponse::deserialize(ReadFunc receive, unsigned long length) {
-    //     std::unordered_map<std::string, ConflictResolution> resolutions{};
-    //     unsigned long bytes_read{0};
-    //     while(bytes_read < length) {
-    //         unsigned short string_len_le;
-    //         receive(&string_len_le, sizeof(string_len_le));
-    //         char resolution_key[le16toh(string_len_le) + 1];
-    //         receive(resolution_key, le16toh(string_len_le));
-    //         resolution_key[le16toh(string_len_le)] = '\0';
-    //         int resolution_choice_le;
-    //         receive(&resolution_choice_le, sizeof(resolution_choice_le));
-
-    //         resolutions.emplace(std::string(resolution_key), static_cast<ConflictResolution>(le32toh(resolution_choice_le)));
-    //     }
-    //     return ConflictResolutionsResponse(resolutions);
-    // }
-
-
-    // std::shared_ptr<Message> deserialize_packet(MessageType raw_type, unsigned long length, ReadFunc receive) {
-    //     if(raw_type == MsgVersion) {
-    //         return std::make_shared<VersionResponse>(VersionResponse::deserialize(receive));
-    //     } else if(raw_type == MsgChanges) {
-    //         return std::make_shared<ChangesResponse>(ChangesResponse::deserialize(receive, length));
-    //     } else if(raw_type == MsgFileTransfer) {
-    //         return std::make_shared<FileTransferResponse>(FileTransferResponse::deserialize(receive, length));
-    //     } else if(raw_type == MsgStartSync) {
-    //         return std::make_shared<StartSyncResponse>(StartSyncResponse::deserialize());
-    //     } else if(raw_type == MsgConflictResolutions) {
-    //         return std::make_shared<ConflictResolutionsResponse>(ConflictResolutionsResponse::deserialize(receive, length));
-
-    //     } else if(raw_type == (MsgVersion | MsgRequestFlag)) {
-    //         return std::make_shared<VersionRequest>(VersionRequest());
-    //     } else if(raw_type == (MsgChanges | MsgRequestFlag)) {
-    //         return std::make_shared<ChangesRequest>(ChangesRequest());
-    //     } else if(raw_type == (MsgFileTransfer | MsgRequestFlag)) {
-    //         return std::make_shared<FileTransferRequest>(FileTransferRequest::deserialize(receive, length));
-    //     } else if(raw_type == (MsgStartSync | MsgRequestFlag)) {
-    //         return std::make_shared<StartSyncRequest>(StartSyncRequest());
-    //     } else if(raw_type == (MsgConflictResolutions | MsgRequestFlag)) {
-    //         return std::make_shared<ConflictResolutionsRequest>(ConflictResolutionsRequest());
-    //     } else {
-    //         std::cerr << "Cannot deserialize message type " << msg_type_to_string(raw_type);
-    //         return nullptr;
-    //     }
-    // }
 }

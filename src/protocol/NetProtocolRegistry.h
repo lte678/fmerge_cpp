@@ -17,14 +17,14 @@ namespace fmerge::protocol {
 
     // NOTE: Must contain an MsgType::Unknown field for lookup_protocol_registry to return
     constexpr MsgEntry protocol_registry[] = {
-        {MsgType::Unknown,             "UNKNOWN"            , IgnoreMessage::deserialize             },
-        {MsgType::Ignore,              "IGNORE"             , IgnoreMessage::deserialize             },
-        {MsgType::Version,             "VERSION"            , VersionMessage::deserialize            },
-        {MsgType::Changes,             "CHANGES"            , ChangesMessage::deserialize            },
-        {MsgType::FileTransfer,        "FILE_TRANSFER"      , FileTransferMessage::deserialize       },
-        {MsgType::FileRequest,         "FILE_REQUEST"       , FileRequestMessage::deserialize        },
-        {MsgType::StartSync,           "START_SYNC"         , StartSyncMessage::deserialize          },
-        {MsgType::ConflictResolutions, "CONFLICT_RESOLUTION", ConflictResolutionsMessage::deserialize},
+        {MsgType::Unknown,             "UNKNOWN"            , deserialize<IgnoreMessage>             },
+        {MsgType::Ignore,              "IGNORE"             , deserialize<IgnoreMessage>             },
+        {MsgType::Version,             "VERSION"            , deserialize<VersionMessage>            },
+        {MsgType::Changes,             "CHANGES"            , deserialize<ChangesMessage>            },
+        {MsgType::FileTransfer,        "FILE_TRANSFER"      , deserialize<FileTransferMessage>       },
+        {MsgType::FileRequest,         "FILE_REQUEST"       , deserialize<FileRequestMessage>        },
+        {MsgType::StartSync,           "START_SYNC"         , deserialize<StartSyncMessage>          },
+        {MsgType::ConflictResolutions, "CONFLICT_RESOLUTION", deserialize<ConflictResolutionsMessage>},
     };
 
     
