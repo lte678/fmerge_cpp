@@ -90,7 +90,10 @@ namespace fmerge {
             cursor_to_last_line();
         }
         // Print and clear any remanents that may be left from the footer
-        os << printable << "\033[K";
+        for(char c : printable) {
+            if(c == '\n') os << "\033[K";
+            os << c;
+        }
         // Delete the last line buffer if the last line contained a newline
         if(contains_nl) {
             last_line.clear();
@@ -103,7 +106,7 @@ namespace fmerge {
         }
         // Redraw the footer, if applicable
         if(!persistent_footer.empty()) {
-            os << persistent_footer;
+            os << persistent_footer << '\r';
         }
     }
 
