@@ -5,7 +5,9 @@
 #include <sys/ioctl.h>
 
 namespace fmerge {
-    std::ostream* _stream;
+    using std::ostream, std::istream, std::string;
+
+    ostream* _stream;
     Terminal* _stream_term;
     Terminal* term() {
         if(_stream_term == nullptr) {
@@ -13,7 +15,7 @@ namespace fmerge {
         }
         return _stream_term;
     }
-    std::ostream& termbuf() {
+    ostream& termbuf() {
         if(_stream == nullptr) {
             _stream = new std::ostream(term());
         }
@@ -22,13 +24,16 @@ namespace fmerge {
 
     constexpr int PROGRESS_BAR_WIDTH = 45; // Does not include trailing percentage
 
-    Terminal::Terminal(std::ostream& _os, std::istream& _is) :
+    Terminal::Terminal(ostream& _os, istream& _is) :
         os(_os), is(_is) {
         struct winsize w;
         if(ioctl(0, TIOCGWINSZ, &w) == -1) {
             std::cerr << "[Error] Could not fetch terminal width" << std::endl;
         }
         terminal_width = w.ws_col;
+
+        // Create input listener thread
+        istream_listener_thread = std::thread([this]() { istream_listener(); });
     }
 
     void Terminal::update_progress_bar(float progress, string trailing) {
@@ -80,6 +85,60 @@ namespace fmerge {
             }
         }
     }
+
+
+    void Terminal::prompt_choice_async(const string &options, std::function<void(char)> callback) {
+        auto put_prompt = [options]() {
+            std::stringstream prompt_str{};
+            prompt_str << "[";
+            for(size_t i = 0; i < options.length(); i++) {
+                if(i != 0) {
+                    prompt_str << "/";
+                }
+                prompt_str << options[i];
+            }
+            prompt_str << "] ";
+            termbuf() << prompt_str.str() << std::endl;
+        };
+
+        put_prompt();
+
+        istream_callback_lock.lock();
+        istream_callback = [this, options, callback, put_prompt](std::string response) {
+            if(response.length() > 1 || (options.find(response[0]) == string::npos)) {
+                termbuf() << "Invalid option." << std::endl;
+                put_prompt();
+                return false;
+            } else {
+                callback(response[0]);
+                return true;
+            }
+        };
+        istream_callback_lock.unlock();
+    }
+
+
+    void Terminal::cancel_prompt() {
+        istream_callback_lock.lock();
+        istream_callback = {};
+        istream_callback_lock.unlock();
+    }
+
+
+    void Terminal::istream_listener() {
+        while(true) {
+            std::string user_input;
+            is >> user_input;
+            
+            // Forward to callback function
+            istream_callback_lock.lock();
+            if(istream_callback(user_input)) {
+                istream_callback = {};
+            }
+            istream_callback_lock.unlock();
+        }
+    }
+
 
     void Terminal::print(string printable) {
         bool contains_trailing_nl = printable.back() == '\n';

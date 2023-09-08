@@ -4,41 +4,54 @@
 #include <functional>
 #include <iostream>
 #include <sstream>
+#include <thread>
+#include <mutex>
 
 
 namespace fmerge {
-    using std::ostream, std::istream, std::string;
+
+    constexpr int DEFAULT_TERMINAL_WIDTH = 80;
 
     class Terminal : public std::stringbuf {
     public:
-        Terminal(ostream& _os, istream& _is);
+        Terminal(std::ostream& _os, std::istream& _is);
 
-        void update_progress_bar(float progress, string trailing = "");
+        void update_progress_bar(float progress, std::string trailing = "");
         void complete_progress_bar();
         
-        char prompt_choice(const string &options);
-        void prompt_choice_async(const string &options, std::function<char(void)> callback);
+        char prompt_choice(const std::string &options);
+        void prompt_choice_async(const std::string &options, std::function<void(char)> callback);
+        void cancel_prompt();
 
         // Overridden from std::streambuf
         int sync();
     private:
-        ostream& os;
-        istream& is;
+        std::ostream& os;
+        std::istream& is;
 
-        void print(string printable);
+        // Predically reads the input stream to enable non-blocking user input
+        void istream_listener();
+        // Periodically prints internal stringbuf contents
+        void print(std::string printable);
 
         // Width of terminal in characters. Resize not supported.
-        int terminal_width;
+        int terminal_width{DEFAULT_TERMINAL_WIDTH};
 
         /// Set to the contents of the last line if it is still in progress and 
         /// was not completed with a newline.
-        string last_line{};
+        std::string last_line{};
         /// Moves the cursor to the position of the last line in the console.
         void cursor_to_last_line();
 
-        string persistent_footer{};
+        std::string persistent_footer{};
 
-        string progress_last_suffix{};
+        std::string progress_last_suffix{};
+    
+        std::thread istream_listener_thread{};
+        // @returns true if the callback should be destroyed after being called.
+        std::function<bool(std::string)> istream_callback{};
+        std::mutex istream_callback_lock{};
+
     };
 
     extern std::ostream* _stream;

@@ -48,7 +48,7 @@ namespace fmerge {
         void send_filetree();
         void do_merge();
         void do_sync();
-        bool ask_proceed();
+        void ask_proceed();
 
         // Wait for the next state to be activated asynchronously, usually by completion of a thread or peer message
         void wait_for_state(State target_state);

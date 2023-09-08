@@ -32,9 +32,8 @@ namespace fmerge {
         do_merge();
 
         wait_for_state(State::SyncUserWait);
-        if(!ask_proceed()) {
-            return;
-        }
+        ask_proceed();
+
         wait_for_state(State::SyncingFiles);
         termbuf() << "Performing file sync. This may take a while..." << std::endl;
         do_sync();
@@ -148,6 +147,8 @@ namespace fmerge {
 
 
     void StateController::handle_start_sync_message(std::shared_ptr<StartSyncMessage>) {
+        term()->cancel_prompt();
+        termbuf() << "Continuing (triggered by peer)..." << std::endl;
         state_lock.lock();
         state = State::SyncingFiles;
         state_lock.unlock();
@@ -314,14 +315,18 @@ namespace fmerge {
     }
 
 
-    bool StateController::ask_proceed() {
-        char response = term()->prompt_choice("yn");
-        if(response == 'y') {
-            c->send_message(std::make_shared<StartSyncMessage>());
-            return true;
-        }
-        termbuf() << "Exiting." << std::endl;
-        return false;
+    void StateController::ask_proceed() {
+        term()->prompt_choice_async("yn", [this](char choice) {
+            if(choice == 'y') {
+                c->send_message(std::make_shared<StartSyncMessage>());
+                state_lock.lock();
+                state = State::SyncingFiles;
+                state_lock.unlock();
+            } else {
+                termbuf() << "Exiting..." << std::endl;
+                exit(0);
+            }
+        });
     }
 
 
