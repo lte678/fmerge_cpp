@@ -56,10 +56,10 @@ namespace fmerge::protocol {
         long atime_le = htole64(access_time);
         write(&atime_le, sizeof(atime_le));
 
-        auto ftype_char = static_cast<unsigned char>(ftype);
+        unsigned char ftype_char = static_cast<unsigned char>(ftype);
         write(&ftype_char, sizeof(ftype_char));
 
-        long path_length = htole16(static_cast<unsigned short>(path.length()));
+        unsigned short path_length = htole16(static_cast<unsigned short>(path.length()));
         write(&path_length, sizeof(path_length));
         write(path.c_str(), path.length());
 
