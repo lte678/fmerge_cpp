@@ -238,41 +238,44 @@ namespace fmerge {
         sorted_local_changes = sort_changes_by_file(read_changes(path));
         state_lock.unlock();
         
-        while(true) {
-            auto [merged_sorted_changes, operations, conflicts] = merge_change_sets(sorted_local_changes, sorted_peer_changes, resolutions);
+        std::vector<Conflict> conflicts;
+        while((conflicts = attempt_merge(sorted_local_changes, sorted_peer_changes, resolutions)).empty() == false) {
+            std::cerr << "!!! Merge conflicts occured for the following paths:" << std::endl;
+            for(const auto &conflict : conflicts) { 
+                termbuf() << "    " << "CONFLICT  " << conflict.conflict_key << std::endl;
+            }
+        
+            auto user_resolutions = ask_for_resolutions(conflicts, sorted_local_changes, sorted_peer_changes);
+            // This may be empty, then keep the existing resolutions
+            if(!user_resolutions.empty()) {
+                resolutions = user_resolutions;
 
-            if(conflicts.size() > 0) {
-                std::cerr << "!!! Merge conflicts occured for the following paths:" << std::endl;
-                for(const auto &conflict : conflicts) { 
-                    termbuf() << "    " << "CONFLICT  " << conflict.conflict_key << std::endl;
-                }
-            
-                auto user_resolutions = ask_for_resolutions(conflicts, sorted_local_changes, sorted_peer_changes);
-                // This may be empty, then keep the existing resolutions
-                if(!user_resolutions.empty()) {
-                    resolutions = user_resolutions;
-                }
-            } else {
-                state_lock.lock();
-                pending_operations = operations;
-                pending_changes = merged_sorted_changes;
-                state_lock.unlock();
-
-                // Forward the now valid list of resolutions to the remote
-                if(resolutions.size() > 0) {
-                    auto peer_resolutions = translate_peer_resolutions(resolutions);
-                    c->send_message(
-                        std::make_shared<ConflictResolutionsMessage>(peer_resolutions)
-                    );
-                }
-
-                //print_sorted_changes(merged_sorted_changes);
-                termbuf() << "Pending operations:" << std::endl;
-                print_sorted_operations(operations);
-                state = State::SyncUserWait;
-                return;
+                auto peer_resolutions = translate_peer_resolutions(resolutions);
+                c->send_message(
+                    std::make_shared<ConflictResolutionsMessage>(peer_resolutions)
+                );
             }
         }
+
+        state = State::SyncUserWait;
+    }
+
+
+    std::vector<Conflict> StateController::attempt_merge(const SortedChangeSet& loc, const SortedChangeSet& rem, const std::unordered_map<std::string, ConflictResolution> &resolutions) {
+        auto [merged_sorted_changes, operations, conflicts] = merge_change_sets(loc, rem, resolutions);
+        if(conflicts.size() > 0) {
+            // Indicate failure
+            return conflicts;
+        }
+        // Success
+        state_lock.lock();
+        pending_operations = operations;
+        pending_changes = merged_sorted_changes;
+        state_lock.unlock();
+
+        termbuf() << "Pending operations:" << std::endl;
+        print_sorted_operations(operations);
+        return {};
     }
 
 
@@ -316,12 +319,9 @@ namespace fmerge {
             }
             processed_change_count++;
         }
-        state_lock.unlock();
+        write_changes(path, recombine_changes_by_file(sorted_local_changes));
 
         term()->complete_progress_bar();
-
-        // This creates duplicates once we also update the filetree on-disk structure at the next execution
-        //write_changes(path, recombine_changes_by_file(sorted_local_changes));
         termbuf() << "Saved changes to disk" << std::endl;
     }
 

@@ -152,6 +152,9 @@ namespace fmerge {
 
 
     void Terminal::print(string printable) {
+        if(printable.empty()) {
+            return;
+        }
         bool contains_trailing_nl = printable.back() == '\n';
         bool contains_nl = printable.find('\n') != string::npos;
 

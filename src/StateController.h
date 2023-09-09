@@ -39,6 +39,7 @@ namespace fmerge {
         void send_version();
         void send_filetree();
         void do_merge();
+        std::vector<Conflict> attempt_merge(const SortedChangeSet& loc, const SortedChangeSet& rem, const std::unordered_map<std::string, ConflictResolution> &resolutions);
         void do_sync();
         void ask_proceed();
 
