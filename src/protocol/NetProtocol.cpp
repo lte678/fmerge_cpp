@@ -111,7 +111,11 @@ namespace fmerge::protocol {
     void ConflictResolutionPayload::serialize(WriteFunc write) const {
         std::stringstream res_stream{};
         for(const auto& resolution : *this) {
-            serialize_conflict_resolution(res_stream, resolution);
+            unsigned short str_length_le = htole16(static_cast<unsigned short>(resolution.first.length()));
+            res_stream.write(reinterpret_cast<const char*>(&str_length_le), sizeof(str_length_le));
+            res_stream.write(resolution.first.c_str(), resolution.first.length());
+            int res_choice_le = htole32(static_cast<int>(resolution.second));
+            res_stream.write(reinterpret_cast<const char*>(&res_choice_le), sizeof(res_choice_le));
         }
         write(res_stream.str().c_str(), res_stream.str().length());
     }
@@ -121,17 +125,34 @@ namespace fmerge::protocol {
         auto resolutions = new ConflictResolutionPayload;
         unsigned long bytes_read{0};
         while(bytes_read < length) {
-            unsigned short string_len_le;
-            receive(&string_len_le, sizeof(string_len_le));
-            char resolution_key[le16toh(string_len_le) + 1];
-            receive(resolution_key, le16toh(string_len_le));
-            resolution_key[le16toh(string_len_le)] = '\0';
+            unsigned short string_len;
+            receive(&string_len, sizeof(string_len));
+            string_len = le16toh(string_len);
+            char resolution_key[string_len + 1];
+            receive(resolution_key, string_len);
+            resolution_key[string_len] = '\0';
             int resolution_choice_le;
             receive(&resolution_choice_le, sizeof(resolution_choice_le));
 
             resolutions->emplace(std::string(resolution_key), static_cast<ConflictResolution>(le32toh(resolution_choice_le)));
+            bytes_read += sizeof(string_len) + string_len + sizeof(resolution_choice_le);
         }
         return std::unique_ptr<ConflictResolutionPayload>(resolutions);
+    }
+
+
+    void StatePayload::serialize(WriteFunc write) const {
+        int state_le = static_cast<int>(state);
+        state_le = htole32(state_le);
+        write(&state_le, sizeof(state_le));
+    }
+
+
+    std::unique_ptr<StatePayload> StatePayload::deserialize(ReadFunc receive, unsigned long) {
+        int state{};
+        receive(&state, sizeof(state));
+        state = le32toh(state);
+        return std::unique_ptr<StatePayload>(new StatePayload(static_cast<State>(state)));
     }
 
 }

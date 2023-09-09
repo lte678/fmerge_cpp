@@ -16,8 +16,8 @@
 namespace fmerge {
     constexpr int HEADER_WIDTH = 80;
     constexpr char HEADER_CHAR = '=';
-    constexpr int CHANGE_TYPE_WIDTH = 12;
-    constexpr int CHANGE_TIME_WIDTH = 28;
+    constexpr int CHANGE_TYPE_WIDTH = 14;
+    constexpr int CHANGE_TIME_WIDTH = 26;
     constexpr int CHANGE_WIDTH = CHANGE_TYPE_WIDTH + CHANGE_TIME_WIDTH;
 
 
@@ -93,8 +93,11 @@ namespace fmerge {
             auto choice = term()->prompt_choice("lr");
             if(choice == 'l') {
                 resolutions.emplace(key, ConflictResolution::KeepLocal);
-            } else {
+            } else if (choice == 'r') {
                 resolutions.emplace(key, ConflictResolution::KeepRemote);
+            } else {
+                // Returned 0, meaning that input was interrupted
+                return {};
             }
         }
 

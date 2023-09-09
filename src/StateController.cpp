@@ -52,8 +52,8 @@ namespace fmerge {
             return handle_file_transfer_message(std::dynamic_pointer_cast<FileTransferMessage>(msg));
         } else if(msg->type() == MsgType::FileRequest) {
             return handle_file_request_message(std::dynamic_pointer_cast<FileRequestMessage>(msg));
-        } else if(msg->type() == MsgType::StartSync) {
-            return handle_start_sync_message(std::dynamic_pointer_cast<StartSyncMessage>(msg));
+        } else if(msg->type() == MsgType::ExitingState) {
+            return handle_exiting_state_message(std::dynamic_pointer_cast<ExitingStateMessage>(msg));
         } else if(msg->type() == MsgType::ConflictResolutions) {
             return handle_resolutions_message(std::dynamic_pointer_cast<ConflictResolutionsMessage>(msg));
         } else {
@@ -146,12 +146,16 @@ namespace fmerge {
     }
 
 
-    void StateController::handle_start_sync_message(std::shared_ptr<StartSyncMessage>) {
-        term()->cancel_prompt();
-        termbuf() << "Continuing (triggered by peer)..." << std::endl;
-        state_lock.lock();
-        state = State::SyncingFiles;
-        state_lock.unlock();
+    void StateController::handle_exiting_state_message(std::shared_ptr<ExitingStateMessage> msg) {
+        if(msg->get_payload().state == State::SyncUserWait) {
+            term()->cancel_prompt();
+            termbuf() << "Continuing (triggered by peer)..." << std::endl;
+            state_lock.lock();
+            state = State::SyncingFiles;
+            state_lock.unlock();
+        } else {
+            std::cerr << "Error: Received unknown exit state message from peer" << std::endl;
+        }
     }
 
 
@@ -208,11 +212,13 @@ namespace fmerge {
 
     void StateController::handle_resolutions_message(std::shared_ptr<ConflictResolutionsMessage> msg) {
         termbuf() << "Received conflict resolutions from peer:" << std::endl;
-        auto& resolutions = msg->get_payload();
+        resolutions = msg->get_payload();
         for(const auto& resolution : resolutions) {
-            termbuf() << "    " << resolution.first << ":" << resolution.second << std::endl;
+            termbuf() << "    " << std::setw(64) << std::left << resolution.first << ": " << resolution.second << std::endl;
         }
-        termbuf() << "TODO: Interrupt ask for resolutions!" << std::endl;
+        // Cancel asking for resolutions locally, since it has already been resolved on the remote
+        term()->cancel_prompt();
+        // This triggers the file sync
     }
 
 
@@ -222,7 +228,7 @@ namespace fmerge {
 
 
     void StateController::do_merge() {
-        state = ResolvingConflicts;
+        state = State::ResolvingConflicts;
         state_lock.lock();
         auto sorted_peer_changes = sort_changes_by_file(peer_changes);
 
@@ -241,7 +247,11 @@ namespace fmerge {
                     termbuf() << "    " << "CONFLICT  " << conflict.conflict_key << std::endl;
                 }
             
-                resolutions = ask_for_resolutions(conflicts, sorted_local_changes, sorted_peer_changes);
+                auto user_resolutions = ask_for_resolutions(conflicts, sorted_local_changes, sorted_peer_changes);
+                // This may be empty, then keep the existing resolutions
+                if(!user_resolutions.empty()) {
+                    resolutions = user_resolutions;
+                }
             } else {
                 state_lock.lock();
                 pending_operations = operations;
@@ -250,15 +260,16 @@ namespace fmerge {
 
                 // Forward the now valid list of resolutions to the remote
                 if(resolutions.size() > 0) {
+                    auto peer_resolutions = translate_peer_resolutions(resolutions);
                     c->send_message(
-                        std::make_shared<ConflictResolutionsMessage>(resolutions)
+                        std::make_shared<ConflictResolutionsMessage>(peer_resolutions)
                     );
                 }
 
                 //print_sorted_changes(merged_sorted_changes);
                 termbuf() << "Pending operations:" << std::endl;
                 print_sorted_operations(operations);
-                state = SyncUserWait;
+                state = State::SyncUserWait;
                 return;
             }
         }
@@ -318,7 +329,7 @@ namespace fmerge {
     void StateController::ask_proceed() {
         term()->prompt_choice_async("yn", [this](char choice) {
             if(choice == 'y') {
-                c->send_message(std::make_shared<StartSyncMessage>());
+                c->send_message(std::make_shared<ExitingStateMessage>(state.load()));
                 state_lock.lock();
                 state = State::SyncingFiles;
                 state_lock.unlock();

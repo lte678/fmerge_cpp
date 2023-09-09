@@ -19,7 +19,7 @@ namespace fmerge::protocol {
         Changes,
         FileTransfer,
         FileRequest,
-        StartSync,
+        ExitingState,
         ConflictResolutions,
     };
 

@@ -20,7 +20,10 @@ namespace fmerge {
         void complete_progress_bar();
         
         char prompt_choice(const std::string &options);
-        void prompt_choice_async(const std::string &options, std::function<void(char)> callback);
+        void prompt_choice_async(
+            const std::string &options, 
+            std::function<void(char)> callback,
+            std::function<void(void)> _cancel_callback = {});
         void cancel_prompt();
 
         // Overridden from std::streambuf
@@ -50,6 +53,7 @@ namespace fmerge {
         std::thread istream_listener_thread{};
         // @returns true if the callback should be destroyed after being called.
         std::function<bool(std::string)> istream_callback{};
+        std::function<void(void)> cancel_callback{};
         std::mutex istream_callback_lock{};
 
     };

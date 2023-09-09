@@ -23,7 +23,7 @@ namespace fmerge::protocol {
         {MsgType::Changes,             "CHANGES"            , deserialize<ChangesMessage>            },
         {MsgType::FileTransfer,        "FILE_TRANSFER"      , deserialize<FileTransferMessage>       },
         {MsgType::FileRequest,         "FILE_REQUEST"       , deserialize<FileRequestMessage>        },
-        {MsgType::StartSync,           "START_SYNC"         , deserialize<StartSyncMessage>          },
+        {MsgType::ExitingState,        "EXITING_STATE"      , deserialize<ExitingStateMessage>       },
         {MsgType::ConflictResolutions, "CONFLICT_RESOLUTION", deserialize<ConflictResolutionsMessage>},
     };
 

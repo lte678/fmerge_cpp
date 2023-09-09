@@ -61,15 +61,6 @@ namespace fmerge {
     }
 
 
-    inline void serialize_conflict_resolution(std::ostream& os, const std::pair<std::string, ConflictResolution>& res) {
-        unsigned short str_length_le = htole16(static_cast<unsigned short>(res.first.length()));
-        os.write(reinterpret_cast<const char*>(&str_length_le), sizeof(str_length_le));
-        os.write(res.first.c_str(), res.first.length());
-        int res_choice_le = htole32(static_cast<int>(res.second));
-        os.write(reinterpret_cast<const char*>(&res_choice_le), sizeof(res_choice_le));
-    }
-
-
     struct Conflict {
         Conflict(std::string _conflict_key) : conflict_key(_conflict_key) {};
 
@@ -77,6 +68,11 @@ namespace fmerge {
         std::string conflict_key;
     };
 
+    typedef std::unordered_map<std::string, ConflictResolution> ConflictResolutionSet;
+    
+    // Translates the local set of conflict resolutions into the inverse resolutions for the
+    // peer.
+    ConflictResolutionSet translate_peer_resolutions(ConflictResolutionSet local_set);
 
     // Takes a list of changes and sorts them, so that each element of the unordered map
     // contains a list of changes only relevant to that specific file.
@@ -94,10 +90,10 @@ namespace fmerge {
     optional<pair<vector<Change>, vector<FileOperation>>> try_automatic_resolution(const vector<Change> &rem, const vector<Change> &loc);
 
     // Create a list of file operations that create the given changes that originate from the remote
-    std::vector<FileOperation> construct_changes(std::vector<Change> changes);
+    std::vector<FileOperation> construct_operations(std::vector<Change> changes);
 
     // Create a list of file operations that revert the given changes on the local machine
-    std::vector<FileOperation> revert_changes(std::vector<Change> changes);
+    std::vector<FileOperation> revert_operations(std::vector<Change> changes);
 
     // Simplify the list of file operations to be performed to a minimal set.
     // Is critical to avoid unnecessary and also impossible operations that are generated during the merge.

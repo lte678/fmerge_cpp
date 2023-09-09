@@ -3,6 +3,7 @@
 #include "GenericMessage.h"
 #include "../FileTree.h"
 #include "../MergeAlgorithms.h"
+#include "../ApplicationState.h"
 
 #include <sstream>
 #include <array>
@@ -82,6 +83,16 @@ namespace fmerge::protocol {
     };
 
 
+    struct StatePayload {
+        StatePayload(State _state) : state(_state) {}
+
+        State state;
+
+        void serialize(WriteFunc write) const;
+        static std::unique_ptr<StatePayload> deserialize(ReadFunc receive, unsigned long length);
+    };
+
+
     // --------------------------------------------------------------------------------
     // ---------------------------- Message Definitions -------------------------------
     // --------------------------------------------------------------------------------
@@ -124,10 +135,11 @@ namespace fmerge::protocol {
     };
 
 
-    class StartSyncMessage : public EmptyMessage {
+    class ExitingStateMessage : public Message<StatePayload> {
     public:
-    using EmptyMessage::EmptyMessage;
-        MsgType type() const override { return MsgType::StartSync; }
+        using Message<StatePayload>::Message;
+        ExitingStateMessage() = delete;
+        MsgType type() const override { return MsgType::ExitingState; }
     };
 
 

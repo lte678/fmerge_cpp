@@ -30,6 +30,21 @@ namespace fmerge {
     }
 
 
+    ConflictResolutionSet translate_peer_resolutions(ConflictResolutionSet local_set) {
+        ConflictResolutionSet peer_set{};
+        for(const auto &resolution : local_set) {
+            if (resolution.second == ConflictResolution::KeepLocal) {
+                peer_set.emplace(resolution.first, ConflictResolution::KeepRemote);
+            } else if(resolution.second == ConflictResolution::KeepRemote) {
+                peer_set.emplace(resolution.first, ConflictResolution::KeepLocal);
+            } else {
+                std::cerr << "[Error] translate_peer_resolutions" << std::endl;
+            }
+        }
+        return peer_set;
+    }
+
+
     SortedChangeSet sort_changes_by_file(std::vector<Change> changes) {
         SortedChangeSet sorted_set{};
         for(const auto &change : changes) {
@@ -76,22 +91,27 @@ namespace fmerge {
             progress_counter++;
 
             const auto &path = file_changes.first;
+            auto& changes = file_changes.second;
             if(change_set_contains(rem, path)) {
                 // TODO: Add some smarter merge conflict resolutions
                 if(resolutions.find(path) != resolutions.end()) {
+                    std::vector<FileOperation> ops_a, ops_b;
                     // A resolution has been specified
                     switch(resolutions.at(path)) {
                     case ConflictResolution::KeepLocal:
-                        merged_set.emplace(path, file_changes.second);
+                        merged_set.emplace(path, changes);
                         // No changes to file tree required
                         break;
                     case ConflictResolution::KeepRemote:
                         merged_set.emplace(path, rem.at(path));
                         // File tree must be modified.
                         // Revert our discarded changes
-                        operations.emplace(path, revert_changes(file_changes.second));
+                        ops_a = revert_operations(changes);
                         // Add the selected remote changes
-                        operations.emplace(path, construct_changes(rem.at(path)));
+                        ops_b = construct_operations(rem.at(path));
+                        ops_a.insert(ops_a.end(), ops_b.begin(), ops_b.end());
+
+                        operations.emplace(path, ops_a);
                         break;
                     default:
                         std::cerr << "[Error] Invalid resolution type " << static_cast<int>(resolutions.at(path)) << std::endl;
@@ -99,7 +119,7 @@ namespace fmerge {
                 } else {
                     // The user has not specified a resolution
                     auto rem_file_changes = rem.at(path);
-                    auto file_merge_result = try_automatic_resolution(rem_file_changes, file_changes.second);
+                    auto file_merge_result = try_automatic_resolution(rem_file_changes, changes);
                     if(file_merge_result.has_value()) {
                         // Automatic resolution successful
                         merged_set.emplace(path, file_merge_result->first);
@@ -115,7 +135,7 @@ namespace fmerge {
                 
             } else {
                 // Trivial merge. The other branch never did anything with this file
-                merged_set.emplace(path, file_changes.second);
+                merged_set.emplace(path, changes);
             }
         }
 
@@ -127,11 +147,12 @@ namespace fmerge {
             progress_counter++;
 
             const auto &path = file_changes.first;
+            auto& changes = file_changes.second;
             if(!change_set_contains(loc, path)) {
                 // Trivial merge. The other branch never did anything with this file
-                merged_set.emplace(path, file_changes.second);
+                merged_set.emplace(path, changes);
                 // These changes will have to be constructed locally
-                operations.emplace(path, construct_changes(file_changes.second));
+                operations.emplace(path, construct_operations(changes));
             }
         }
 
@@ -163,12 +184,12 @@ namespace fmerge {
             return std::pair<std::vector<Change>, std::vector<FileOperation>>{loc, std::vector<FileOperation>{}};
         } else {
             std::vector<Change> new_local_changes(rem.begin() + loc.size(), rem.end());
-            return std::pair<std::vector<Change>, std::vector<FileOperation>>{rem, construct_changes(new_local_changes)};
+            return std::pair<std::vector<Change>, std::vector<FileOperation>>{rem, construct_operations(new_local_changes)};
         }
     }
 
 
-    std::vector<FileOperation> construct_changes(std::vector<Change> changes) {
+    std::vector<FileOperation> construct_operations(std::vector<Change> changes) {
         // Make remote change local
         std::vector<FileOperation> ops;
         for(const auto &change: changes) {
@@ -193,29 +214,29 @@ namespace fmerge {
     }
 
 
-    std::vector<FileOperation> revert_changes(std::vector<Change> changes) {
+    std::vector<FileOperation> revert_operations(std::vector<Change> changes) {
         // Destroy local changes
         std::vector<FileOperation> ops;
-        for(const auto &change: changes) {
-            switch(change.type) {
+        for(auto change_it = changes.rbegin(); change_it != changes.rend(); change_it++) {
+        switch(change_it->type) {
             case ChangeType::Creation:
                 // To revert the file tree we have to delete the file again
-                ops.emplace_back(FileOperation{FileOperationType::Delete, change.file.path});
+                ops.emplace_back(FileOperation{FileOperationType::Delete, change_it->file.path});
                 break;
             case ChangeType::Deletion:
                 // To revert deletion, we have to recreate it. This is impossible.
                 // Thus we use a placeholder revert, which is optimized away, since this always indirectly
                 // implies that another remote file will be copied over this one.
-                ops.emplace_back(FileOperation{FileOperationType::PlaceholderRevert, change.file.path});
+                ops.emplace_back(FileOperation{FileOperationType::PlaceholderRevert, change_it->file.path});
                 break;
             case ChangeType::Modification:
                 // Reverting is impossible.
                 // Thus we use a placeholder revert, which is optimized away, since this always indirectly
                 // implies that another remote file will be copied over this one.
-                ops.emplace_back(FileOperation{FileOperationType::PlaceholderRevert, change.file.path});
+                ops.emplace_back(FileOperation{FileOperationType::PlaceholderRevert, change_it->file.path});
                 break;
             default:
-                termbuf() << "[Error] Unknown change type " << change.type << std::endl;
+                termbuf() << "[Error] Unknown change type " << change_it->type << std::endl;
             }
         }
         return ops;

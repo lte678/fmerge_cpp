@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <condition_variable>
 #include <sys/ioctl.h>
 
 namespace fmerge {
@@ -67,27 +68,32 @@ namespace fmerge {
 
 
     char Terminal::prompt_choice(const string &options) {
-        string response;
-        while(true) {
-            os << "[";
-            for(size_t i = 0; i < options.length(); i++) {
-                if(i != 0) {
-                    os << "/";
-                }
-                os << options[i];
-            }
-            os << "] ";
-            std::cin >> response;
-            if(response.length() > 1 || (options.find(response[0]) == string::npos)) {
-                os << "Invalid option." << std::endl;
-            } else {
-                return response[0];
-            }
-        }
+        std::condition_variable flag;
+        std::mutex flag_m;
+        std::unique_lock<std::mutex> flag_lock(flag_m);
+
+        char response{0};
+
+        prompt_choice_async(options,
+        [&response, &flag](char _response) {
+            response = _response;
+            flag.notify_all();
+        },
+        [&response, &flag]() {
+            response = '\0';
+            flag.notify_all();
+        });
+
+        flag.wait(flag_lock);
+        return response;
     }
 
 
-    void Terminal::prompt_choice_async(const string &options, std::function<void(char)> callback) {
+    void Terminal::prompt_choice_async(
+        const string &options,
+        std::function<void(char)> callback,
+        std::function<void(void)> _cancel_callback) {
+        
         auto put_prompt = [options]() {
             std::stringstream prompt_str{};
             prompt_str << "[";
@@ -114,6 +120,7 @@ namespace fmerge {
                 return true;
             }
         };
+        cancel_callback = _cancel_callback;
         istream_callback_lock.unlock();
     }
 
@@ -122,6 +129,10 @@ namespace fmerge {
         istream_callback_lock.lock();
         istream_callback = {};
         istream_callback_lock.unlock();
+        if(cancel_callback) {
+            cancel_callback();
+            cancel_callback = {};
+        }
     }
 
 
