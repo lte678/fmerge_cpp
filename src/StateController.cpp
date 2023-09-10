@@ -319,9 +319,10 @@ namespace fmerge {
             }
             processed_change_count++;
         }
+        term()->complete_progress_bar();
+
         write_changes(path, recombine_changes_by_file(sorted_local_changes));
 
-        term()->complete_progress_bar();
         termbuf() << "Saved changes to disk" << std::endl;
     }
 
