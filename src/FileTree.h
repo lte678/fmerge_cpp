@@ -41,8 +41,8 @@ namespace fmerge {
         DirNode(MetadataNode _metadata) : metadata(std::make_shared<MetadataNode>(_metadata)) {}
         DirNode(std::string _name, FileType _ftype, long _mtime) : metadata(std::make_shared<MetadataNode>(_name, _ftype, _mtime)) {}
 
-        std::vector<shared_ptr<DirNode>> subdirs;
-        std::vector<shared_ptr<MetadataNode>> files;
+        std::vector<shared_ptr<DirNode>> subdirs{};
+        std::vector<shared_ptr<MetadataNode>> files{};
         // Metadata
         shared_ptr<MetadataNode> metadata;
     public:
@@ -50,6 +50,10 @@ namespace fmerge {
         shared_ptr<MetadataNode> get_child_file(std::vector<std::string> path_tokens);
         shared_ptr<DirNode> get_child_dir(std::string dir_name);
         shared_ptr<DirNode> get_child_dir(std::vector<std::string> path_tokens);
+
+        bool insert_node(std::vector<std::string> path_tokens, std::shared_ptr<DirNode> dir);
+        bool insert_node(std::vector<std::string> path_tokens, std::shared_ptr<MetadataNode> file);
+        bool remove_node(std::vector<std::string> path_tokens);
 
         void for_node_in_tree(std::function<void(std::vector<std::string>, shared_ptr<MetadataNode>, bool)> f, std::vector<std::string> prefix = {});
 
@@ -97,6 +101,10 @@ namespace fmerge {
     bool append_changes(std::string path, std::vector<Change> new_changes);
     std::vector<Change> read_changes(std::string base_dir);
     void write_changes(std::string base_dir, std::vector<Change> changes);
+
+    std::shared_ptr<DirNode> construct_tree_from_changes(std::vector<Change> changes);
+    void insert_file_into_tree(std::shared_ptr<DirNode> root_node, const File& file, long mtime);
+    void remove_file_from_tree(std::shared_ptr<DirNode> root_node, const File& file);
 
     std::vector<Change> get_new_tree_changes(std::string path);
 

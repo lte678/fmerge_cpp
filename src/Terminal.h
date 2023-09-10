@@ -16,7 +16,8 @@ namespace fmerge {
     public:
         Terminal(std::ostream& _os, std::istream& _is);
 
-        void update_progress_bar(float progress, std::string trailing = "");
+        void start_progress_bar(std::string trailing = "");
+        void update_progress_bar(float progress);
         void complete_progress_bar();
         
         char prompt_choice(const std::string &options);

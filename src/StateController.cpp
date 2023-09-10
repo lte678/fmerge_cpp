@@ -283,10 +283,10 @@ namespace fmerge {
         // Contains the changes that have been committed to disk
         //std::vector<Change> processed_changes{};
         unsigned long processed_change_count{0};
-        // This is probably too strict of a lock
+        term()->start_progress_bar("Syncing");
         for(const auto& file_ops : pending_operations) {
             if(processed_change_count % 250 == 0) {
-                term()->update_progress_bar(static_cast<float>(processed_change_count) / static_cast<float>(pending_operations.size()), "Syncing");
+                term()->update_progress_bar(static_cast<float>(processed_change_count) / static_cast<float>(pending_operations.size()));
             }
             
             // For us to accurately reproduce the new file history, all operations

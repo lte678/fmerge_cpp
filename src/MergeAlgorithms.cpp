@@ -82,11 +82,13 @@ namespace fmerge {
         // termbuf() << "Merging " <<  loc.size() + rem.size() << " changes..." << std::endl;
         // termbuf() << "Using " << loc.bucket_count() << " buckets" << std::endl;
 
+        term()->start_progress_bar("Merging");
+
         // Work starting with the 'loc' branch, but this process MUST be symmetric!
         for(const auto &file_changes : loc) {
             // TODO: Check if progress bar option enabled
             if(progress_counter % 100) {
-                term()->update_progress_bar(static_cast<float>(progress_counter) / progress_counter_end, "Merging");
+                term()->update_progress_bar(static_cast<float>(progress_counter) / progress_counter_end);
             }
             progress_counter++;
 
@@ -142,7 +144,7 @@ namespace fmerge {
         // Repeat for 'rem' branch, but ignore conflicts, since these must already all have been resolved
         for(const auto &file_changes : rem) {
             if(progress_counter % 100) {
-                term()->update_progress_bar(static_cast<float>(progress_counter) / progress_counter_end, "Merging");
+                term()->update_progress_bar(static_cast<float>(progress_counter) / progress_counter_end);
             }
             progress_counter++;
 

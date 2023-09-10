@@ -94,6 +94,90 @@ namespace fmerge {
     }
 
 
+    bool DirNode::insert_node(std::vector<std::string> path_tokens, std::shared_ptr<DirNode> dir) {
+        // Get the parent node of the element to add
+        auto parent_node = get_child_dir(
+            std::vector<std::string>(path_tokens.begin(), path_tokens.end() - 1)
+        );
+
+
+        // Create a temporary parent if missing. Once this parent node is inserted later,
+        // it will receive it's proper metadata.
+        if(!parent_node) {
+            auto missing_folder = std::vector<std::string>(path_tokens.begin(), path_tokens.end() - 1);
+            insert_node(
+                missing_folder,
+                std::make_shared<DirNode>(MetadataNode(missing_folder.back(), FileType::Directory, 0))
+            );
+        }
+
+        auto existing_dir = get_child_dir(path_tokens.back());
+        if(!existing_dir) {
+            parent_node->subdirs.push_back(dir);
+        } else {
+            // Update the metadata to match the new node
+            existing_dir->metadata = dir->metadata;
+        }
+        return true;
+    }
+
+
+    bool DirNode::insert_node(std::vector<std::string> path_tokens, std::shared_ptr<MetadataNode> file) {
+        // Get the parent node of the element to add
+        auto parent_node = get_child_dir(
+            std::vector<std::string>(path_tokens.begin(), path_tokens.end() - 1)
+        );
+
+        // Create a temporary parent if missing. Once this parent node is inserted later,
+        // it will receive it's proper metadata.
+        if(!parent_node) {
+            auto missing_node = std::vector<std::string>(path_tokens.begin(), path_tokens.end() - 1);
+            parent_node = std::make_shared<DirNode>(MetadataNode(missing_node.back(), FileType::Directory, 0));
+            insert_node(
+                missing_node,
+                parent_node
+            );
+        }
+
+        auto existing_file = parent_node->get_child_file(path_tokens.back());
+        if(!existing_file) {
+            parent_node->files.push_back(file);
+        } else {
+            // Update the metadata to match the new node
+            existing_file->mtime = file->mtime;
+            existing_file->ftype = file->ftype;
+        }
+        return true;
+    }
+
+
+    bool DirNode::remove_node(std::vector<std::string> path_tokens) {
+       // Get the parent node of the element to remove
+        auto parent_node = get_child_dir(
+            std::vector<std::string>(path_tokens.begin(), path_tokens.end() - 1)
+        );
+
+        if(!parent_node) {
+            std::cerr << "Parent node is missing for " << path_tokens.back() << std::endl;
+            return false;
+        } 
+
+        auto existing_file = parent_node->get_child_file(path_tokens.back());
+        if(existing_file) {
+            std::remove(parent_node->files.begin(), parent_node->files.end(), existing_file);
+            return true;
+        }
+        auto existing_dir = get_child_dir(path_tokens.back());
+        if(existing_dir) {
+            std::remove(parent_node->subdirs.begin(), parent_node->subdirs.end(), existing_dir);
+            return true;
+        }
+
+        // Not a file or a directory, but fail silently.
+        return true;
+    }
+
+
     void DirNode::for_node_in_tree(
         std::function<void(std::vector<std::string>, shared_ptr<MetadataNode>, bool)> f,
         std::vector<std::string> prefix) {
@@ -243,6 +327,10 @@ namespace fmerge {
         }
 
 
+        if(show_loading_bar) {
+            term()->start_progress_bar("Building File Tree");
+        }
+
         unsigned int num_files_processed{0};
         for_file_in_dir(base_path,
             [=, &num_files_processed](auto file, const FileStats& stats) {
@@ -252,48 +340,21 @@ namespace fmerge {
 
                 if(show_loading_bar && (num_files_processed % 100) == 0) {
                     // Go back to previous line
-                    term()->update_progress_bar(static_cast<float>(num_files_processed) / static_cast<float>(total_number_files), "Building File Tree");
+                    term()->update_progress_bar(static_cast<float>(num_files_processed) / static_cast<float>(total_number_files));
                 }
                 num_files_processed++;
 
                 auto path_tokens = split_path(file.path);
-
-                shared_ptr<DirNode> parent_node;
-                if(path_tokens.size() > 1) {
-                    parent_node = base_node->get_child_dir(
-                        std::vector<std::string>(path_tokens.begin(), path_tokens.end() - 1)
-                    );
-                } else {
-                    parent_node = base_node;
-                }
-
-                if(!parent_node) {
-                    std::cerr << "Parent node is missing for " << path_tokens.back() << std::endl;
-                    return;
-                }
                 // termbuf() << "Added " << path_tokens.back() << std::endl;
 
                 if(file.is_dir()) {
-                    auto existing_file = parent_node->get_child_dir(path_tokens.back());
-                    if(!existing_file) {
-                        parent_node->subdirs.push_back(
-                            std::make_shared<DirNode>(MetadataNode(path_tokens.back(), stats.type, stats.mtime))
-                        );
-                    } else {
-                        // Update the metadata to match what is actually on disk
-                        existing_file->metadata->mtime = stats.mtime;
-                    }
+                    base_node->insert_node(path_tokens, 
+                        std::make_shared<DirNode>(MetadataNode(path_tokens.back(), stats.type, stats.mtime))
+                    );
                 } else if(file.is_file() || file.is_link()) {
-                    auto existing_file = parent_node->get_child_file(path_tokens.back());
-                    if(!existing_file) {
-                        parent_node->files.push_back(
-                            std::make_shared<MetadataNode>(path_tokens.back(), stats.type, stats.mtime)
-                        );
-                    } else {
-                        // Update the metadata to match what is actually on disk
-                        existing_file->mtime = stats.mtime;
-                        existing_file->ftype = stats.type;
-                    }
+                    base_node->insert_node(path_tokens,
+                        std::make_shared<MetadataNode>(path_tokens.back(), stats.type, stats.mtime)
+                    );
                 } else {
                     std::cerr << "[Error] " << file.path << ": Unknown file type (" << static_cast<int>(stats.type) << std::endl;
                 }
@@ -443,9 +504,13 @@ namespace fmerge {
         size_t total_changes{changes.size()};
         size_t changes_count{0};
 
+        if(show_loading_bar) {
+            term()->start_progress_bar("Write Changes");
+        }
+
         for(const auto& change : changes) {
             if(show_loading_bar && (changes_count % 500) == 0) {
-                term()->update_progress_bar(static_cast<float>(changes_count) / static_cast<float>(total_changes), "Write Changes");
+                term()->update_progress_bar(static_cast<float>(changes_count) / static_cast<float>(total_changes));
             }
             changes_count++;
             change.serialize(stream);
@@ -488,32 +553,53 @@ namespace fmerge {
     }
 
 
-    std::vector<Change> get_new_tree_changes(std::string path) {
-        std::string filetree_file = join_path(path, ".fmerge/filetree.db");
+    std::shared_ptr<DirNode> construct_tree_from_changes(std::vector<Change> changes) {
+        auto root_node = std::make_shared<DirNode>("", FileType::Directory, 0);
 
+        for(const auto& change : changes) {
+            const auto& file = change.file;
+            if(change.type == ChangeType::Creation || change.type == ChangeType::Modification) {
+                insert_file_into_tree(root_node, file, change.earliest_change_time);
+            } else if(change.type == ChangeType::Deletion) {
+                remove_file_from_tree(root_node, file);
+            } else {
+                std::cerr << "[Error] Cannot handle " << change.type << " for " << file.path << std::endl; 
+            }
+        }
+        return root_node;
+    }
+
+
+    void insert_file_into_tree(std::shared_ptr<DirNode> root_node, const File& file, long mtime) {
+        if(file.is_dir()) {
+            root_node->insert_node(split_path(file.path),
+                std::make_shared<DirNode>(MetadataNode(file.name(), file.type, mtime))
+            );
+        } else if(file.is_file() || file.is_link()) {
+            root_node->insert_node(split_path(file.path),
+                std::make_shared<MetadataNode>(file.name(), file.type, mtime)
+            );
+        } else {
+            std::cerr << "[Error] " << file.path << ": Unknown file type (" << static_cast<int>(file.type) << std::endl;
+        }
+    }
+
+
+    void remove_file_from_tree(std::shared_ptr<DirNode> root_node, const File& file) {
+        root_node->remove_node(split_path(file.path));
+    }
+
+
+    std::vector<Change> get_new_tree_changes(std::string path) {
         auto root_stats = get_file_stats(path);
         auto root_node = std::make_shared<DirNode>(split_path(path).back(), root_stats->type, root_stats->mtime);
         update_file_tree(root_node, path); // This is where the current file tree is built in memory
 
         // Attempt to detect changes
-        std::vector<Change> new_changes;
-        if(!exists(filetree_file)) {
-            termbuf() << "No historical filetree.db containing historical data found. Assuming new folder." << std::endl;
-            
-            auto blank_node = std::make_shared<DirNode>(split_path(path).back(), FileType::Directory, 0);
-            new_changes = compare_trees(blank_node, root_node);
-        } else {
-            std::ifstream serialized_tree(filetree_file, std::ios_base::binary); 
-            auto read_from_disk_node = DirNode::deserialize(serialized_tree);
-            // Only check for changes if we were able to load historical data
-            new_changes =  compare_trees(read_from_disk_node, root_node);
-        }
-
-        // Update the filetree.db with the latest state
-        std::ofstream serialized_tree(filetree_file, std::ios_base::trunc | std::ios_base::binary); 
-        root_node->serialize(serialized_tree);
+        auto existing_changes = read_changes(path); // Return empty array if not no change file is present
+        auto existing_tree = construct_tree_from_changes(existing_changes);
+        auto new_changes = compare_trees(existing_tree, root_node);
 
         return new_changes;
     }
-
 }

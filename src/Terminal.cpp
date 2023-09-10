@@ -37,7 +37,12 @@ namespace fmerge {
         istream_listener_thread = std::thread([this]() { istream_listener(); });
     }
 
-    void Terminal::update_progress_bar(float progress, string trailing) {
+    void Terminal::start_progress_bar(string trailing) {
+        progress_last_suffix = trailing;
+        update_progress_bar(0.0f);
+    }
+
+    void Terminal::update_progress_bar(float progress) {
         // Call repeatedly without printing anything else.
         // Once finished, insert a newline.
         int steps = PROGRESS_BAR_WIDTH - 2;
@@ -52,15 +57,14 @@ namespace fmerge {
                 footer_str << " ";
             }
         }
-        footer_str << "] " << trailing << " " << std::round(progress * 100.0f) << "%";
+        footer_str << "] " << progress_last_suffix << " " << std::round(progress * 100.0f) << "%";
         os << footer_str.str() << "\r" << std::flush;
         persistent_footer = footer_str.str();
-        progress_last_suffix = trailing;
     }
 
 
     void Terminal::complete_progress_bar() {
-        update_progress_bar(1.0f, progress_last_suffix);
+        update_progress_bar(1.0f);
         os << std::endl;
         progress_last_suffix.clear();
         persistent_footer.clear();
