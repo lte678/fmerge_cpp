@@ -147,8 +147,11 @@ namespace fmerge {
             
             // Forward to callback function
             istream_callback_lock.lock();
-            if(istream_callback(user_input)) {
-                istream_callback = {};
+            if(istream_callback) {
+                // True indicates the callback should be disabled after this
+                if(istream_callback(user_input)) {
+                    istream_callback = {};
+                }
             }
             istream_callback_lock.unlock();
         }
