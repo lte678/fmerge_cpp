@@ -69,11 +69,10 @@ namespace fmerge {
     }
 
 
-    std::tuple<SortedChangeSet, SortedOperationSet, std::vector<Conflict>>
+    std::tuple<SortedChangeSet, std::vector<Conflict>>
         merge_change_sets(const SortedChangeSet& loc, const SortedChangeSet& rem, const std::unordered_map<std::string, ConflictResolution> &resolutions) {
         
         SortedChangeSet merged_set{};
-        SortedOperationSet operations{}; // The file operations required to achieve the merged file tree on the local device
         std::vector<Conflict> conflicts{};
 
         unsigned long progress_counter{0};
@@ -95,25 +94,14 @@ namespace fmerge {
             const auto &path = file_changes.first;
             auto& changes = file_changes.second;
             if(change_set_contains(rem, path)) {
-                // TODO: Add some smarter merge conflict resolutions
                 if(resolutions.find(path) != resolutions.end()) {
-                    std::vector<FileOperation> ops_a, ops_b;
                     // A resolution has been specified
                     switch(resolutions.at(path)) {
                     case ConflictResolution::KeepLocal:
                         merged_set.emplace(path, changes);
-                        // No changes to file tree required
                         break;
                     case ConflictResolution::KeepRemote:
                         merged_set.emplace(path, rem.at(path));
-                        // File tree must be modified.
-                        // Revert our discarded changes
-                        ops_a = revert_operations(changes);
-                        // Add the selected remote changes
-                        ops_b = construct_operations(rem.at(path));
-                        ops_a.insert(ops_a.end(), ops_b.begin(), ops_b.end());
-
-                        operations.emplace(path, ops_a);
                         break;
                     default:
                         std::cerr << "[Error] Invalid resolution type " << static_cast<int>(resolutions.at(path)) << std::endl;
@@ -124,11 +112,7 @@ namespace fmerge {
                     auto file_merge_result = try_automatic_resolution(rem_file_changes, changes);
                     if(file_merge_result.has_value()) {
                         // Automatic resolution successful
-                        merged_set.emplace(path, file_merge_result->first);
-                        // Revert old changes and add merged changes.
-                        // This will lead to the set of operations required
-                        // to achieve the desired final merged state
-                        operations.emplace(path, file_merge_result->second);
+                        merged_set.emplace(path, file_merge_result.value());
                     } else {
                         // No automatic resolution was possible
                         conflicts.emplace_back(path);
@@ -153,23 +137,19 @@ namespace fmerge {
             if(!change_set_contains(loc, path)) {
                 // Trivial merge. The other branch never did anything with this file
                 merged_set.emplace(path, changes);
-                // These changes will have to be constructed locally
-                operations.emplace(path, construct_operations(changes));
             }
         }
 
         // Done merging
         term()->complete_progress_bar();
         if(conflicts.size() > 0) {
-            return std::make_tuple(SortedChangeSet{}, SortedOperationSet{}, conflicts);
+            return std::make_tuple(SortedChangeSet{}, conflicts);
         }
-
-        operations = squash_operations(operations);
-        return std::make_tuple(merged_set, operations, conflicts);
+        return std::make_tuple(merged_set, conflicts);
     }
 
 
-    std::optional<std::pair<std::vector<Change>, std::vector<FileOperation>>> try_automatic_resolution(const std::vector<Change> &rem, const std::vector<Change> &loc) {
+    std::optional<std::vector<Change>> try_automatic_resolution(const std::vector<Change> &rem, const std::vector<Change> &loc) {
         // Algorithms used to merge the change lists:
         // Equal stems: Check if one branch is ahead of the other. The just fast-forward it a la git.
         for(size_t i = 0; i < loc.size(); i++) {
@@ -182,65 +162,52 @@ namespace fmerge {
         }
         // The change list stems match. Now take the longer change list
         if(loc.size() >= rem.size()) {
-            // Use local changes. No local operations required
-            return std::pair<std::vector<Change>, std::vector<FileOperation>>{loc, std::vector<FileOperation>{}};
+            return loc;
         } else {
-            std::vector<Change> new_local_changes(rem.begin() + loc.size(), rem.end());
-            return std::pair<std::vector<Change>, std::vector<FileOperation>>{rem, construct_operations(new_local_changes)};
+            return rem;
         }
     }
 
 
-    std::vector<FileOperation> construct_operations(std::vector<Change> changes) {
-        // Make remote change local
-        std::vector<FileOperation> ops;
-        for(const auto &change: changes) {
-            switch(change.type) {
-            case ChangeType::Creation:
-                // Transfer created file to our machine to also "create" it.
-                ops.emplace_back(FileOperation{FileOperationType::Transfer, change.file.path});
-                break;
-            case ChangeType::Deletion:
-                // Also delete the file on our machine
-                ops.emplace_back(FileOperation{FileOperationType::Delete, change.file.path});
-                break;
-            case ChangeType::Modification:
-                // Transfer modified file to our machine to also "modify" it.
-                ops.emplace_back(FileOperation{FileOperationType::Transfer, change.file.path});
-                break;
-            default:
-                termbuf() << "[Error] Unknown change type " << change.type << std::endl;
+    SortedOperationSet construct_operation_set(const SortedChangeSet &current, const SortedChangeSet& target) {
+        SortedOperationSet ops{};
+
+        for(const auto &target_changes : target) {
+            if(change_set_contains(current, target_changes.first)) {
+                const auto &current_changes = current.at(target_changes.first);
+                ops.emplace(target_changes.first, construct_operations(current_changes, target_changes.second));
+            } else {
+                ops.emplace(target_changes.first, construct_operations(std::vector<Change>{}, target_changes.second));
             }
         }
         return ops;
     }
 
 
-    std::vector<FileOperation> revert_operations(std::vector<Change> changes) {
-        // Destroy local changes
+    std::vector<FileOperation> construct_operations(const vector<Change> &current, const vector<Change> &target) {
         std::vector<FileOperation> ops;
-        for(auto change_it = changes.rbegin(); change_it != changes.rend(); change_it++) {
-        switch(change_it->type) {
-            case ChangeType::Creation:
-                // To revert the file tree we have to delete the file again
-                ops.emplace_back(FileOperation{FileOperationType::Delete, change_it->file.path});
-                break;
-            case ChangeType::Deletion:
-                // To revert deletion, we have to recreate it. This is impossible.
-                // Thus we use a placeholder revert, which is optimized away, since this always indirectly
-                // implies that another remote file will be copied over this one.
-                ops.emplace_back(FileOperation{FileOperationType::PlaceholderRevert, change_it->file.path});
-                break;
-            case ChangeType::Modification:
-                // Reverting is impossible.
-                // Thus we use a placeholder revert, which is optimized away, since this always indirectly
-                // implies that another remote file will be copied over this one.
-                ops.emplace_back(FileOperation{FileOperationType::PlaceholderRevert, change_it->file.path});
-                break;
-            default:
-                termbuf() << "[Error] Unknown change type " << change_it->type << std::endl;
+
+        auto target_mtime = squash_changes(target);
+        auto current_mtime = squash_changes(current);
+        // NOTE: The modification time is used as a hash
+        if(target_mtime == 0) {
+            // Delete the file if it exists
+            if(current_mtime != 0) {
+                // The file currently exists on disk
+                ops.push_back(FileOperation(FileOperationType::Delete, target.back().file.path));
             }
+            // else
+            //      The file does not exist locally. Do not delete it
+        } else {
+            // A version of the file exists in the target state
+            if(target_mtime != current_mtime) {
+                // The file versions are not identical
+                ops.push_back(FileOperation(FileOperationType::Transfer, target.back().file.path));
+            }
+            // else
+            //      The file versions are identical. Do not do anything
         }
+
         return ops;
     }
 
@@ -255,6 +222,26 @@ namespace fmerge {
             }
         }
         return sqaushed_set;
+    }
+
+
+    long squash_changes(const vector<Change> &changes) {
+        long mtime{0};
+        if(!changes.empty()) {
+            const auto& change = changes.back();
+            switch(change.type) {
+            case ChangeType::Creation:
+            case ChangeType::Modification:
+                mtime = change.earliest_change_time;
+                break;
+            case ChangeType::Deletion:
+                mtime = 0;
+                break;
+            default:
+                std::cerr << "[Error] squash_changes: Unhandled change type!" << std::endl;
+            }
+        }
+        return mtime;
     }
 
 

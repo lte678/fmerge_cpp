@@ -82,22 +82,26 @@ namespace fmerge {
     // order.
     std::vector<Change> recombine_changes_by_file(SortedChangeSet changes);
 
-    std::tuple<SortedChangeSet, SortedOperationSet, std::vector<Conflict>>
+    std::tuple<SortedChangeSet, std::vector<Conflict>>
         merge_change_sets(const SortedChangeSet &loc, const SortedChangeSet &rem, const std::unordered_map<std::string, ConflictResolution> &resolutions);
 
     // Merges two lists of changes into a single list containing both sets. 
     // Will fail if an obvious merge is not possible and user intervention is required.
-    optional<pair<vector<Change>, vector<FileOperation>>> try_automatic_resolution(const vector<Change> &rem, const vector<Change> &loc);
+    optional<vector<Change>> try_automatic_resolution(const vector<Change> &rem, const vector<Change> &loc);
+
+    // Create an unordered map of file operations for each file-key.
+    SortedOperationSet construct_operation_set(const SortedChangeSet &current, const SortedChangeSet& target);
 
     // Create a list of file operations that create the given changes that originate from the remote
-    std::vector<FileOperation> construct_operations(std::vector<Change> changes);
-
-    // Create a list of file operations that revert the given changes on the local machine
-    std::vector<FileOperation> revert_operations(std::vector<Change> changes);
+    std::vector<FileOperation> construct_operations(const vector<Change> &current, const vector<Change> &target);
 
     // Simplify the list of file operations to be performed to a minimal set.
-    // Is critical to avoid unnecessary and also impossible operations that are generated during the merge.
     SortedOperationSet squash_operations(const SortedOperationSet& ops);
+
+    /// Simplify the list of changes to the final resulting file
+    /// @returns Timestamp of latest modification if file exists, or 0 if it is deleted.
+    /// The timestamp is used as a unique hash to identify a specific file revision in this case.
+    long squash_changes(const vector<Change> &changes);
 
     bool is_change_equal(const Change& lhs, const Change& rhs);
 

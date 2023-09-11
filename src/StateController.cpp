@@ -272,19 +272,19 @@ namespace fmerge {
 
 
     std::vector<Conflict> StateController::attempt_merge(const SortedChangeSet& loc, const SortedChangeSet& rem, const std::unordered_map<std::string, ConflictResolution> &resolutions) {
-        auto [merged_sorted_changes, operations, conflicts] = merge_change_sets(loc, rem, resolutions);
+        auto [merged_sorted_changes, conflicts] = merge_change_sets(loc, rem, resolutions);
         if(conflicts.size() > 0) {
             // Indicate failure
             return conflicts;
         }
         // Success
         state_lock.lock();
-        pending_operations = operations;
+        pending_operations = construct_operation_set(loc, merged_sorted_changes);
         pending_changes = merged_sorted_changes;
-        state_lock.unlock();
 
         termbuf() << "Pending operations:" << std::endl;
-        print_sorted_operations(operations);
+        print_sorted_operations(pending_operations);
+        state_lock.unlock();
         return {};
     }
 
