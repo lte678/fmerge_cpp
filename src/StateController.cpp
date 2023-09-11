@@ -196,6 +196,15 @@ namespace fmerge {
             char symlink_contents[ft_payload.payload_len + 1];
             memcpy(symlink_contents, ft_payload.payload.get(), ft_payload.payload_len);
             symlink_contents[ft_payload.payload_len] = '\0';
+            // Delete if exists
+            if(exists(fullpath)) {
+                if(unlink(fullpath.c_str()) == -1) {
+                    print_clib_error("unlink");
+                    std::cerr << "^^^ " << fullpath << std::endl;
+                    return;
+                }
+            }
+            // Create link
             if(symlink(symlink_contents, fullpath.c_str()) == -1) {
                 print_clib_error("symlink");
                 std::cerr << "^^^ " << fullpath << std::endl;
