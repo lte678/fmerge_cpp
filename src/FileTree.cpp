@@ -117,7 +117,7 @@ namespace fmerge {
             );
         }
 
-        auto existing_dir = get_child_dir(path_tokens.back());
+        auto existing_dir = parent_node->get_child_dir(path_tokens.back());
         if(!existing_dir) {
             parent_node->subdirs.push_back(dir);
         } else {
