@@ -9,24 +9,22 @@ This tool does a little bit more than a standard rsync (for example) would do wh
 What it also does, is keep track of which files exist when to allow us to differntiate between the create of a file in one folder from the deletion of that same file in another.
 This most importantly allows file deletions to be propagated between peers.
 
+It also presents a conflict resolution dialog to unify conflicting changes.
+
 ## How is it used?
 
-You don't. 
+With much care. It is currently not thoroughly tested.
+In theory, in it's current state it should be able to somewhat robustly preform the afore-mentioned functions.
 
-Please. 
-
-Don't use this on your files, since it is incomplete and completely untested.
-I will write a notice if I ever consider it mature enough for actual use.
-
-The tool is executed in a client-server configuration, but the computers it is run on do not take on a client-server role.
-The software should in theory yield identical results both ways around.
+The tool is executed in a client-server configuration, but these have no special meaning; The software should in theory yield identical results both ways around.
 
 ## Current Status
 
-Currently, the software can detect and maintain changes that occur in the specified directory and merge these changes from a peer.
-Any special file support (large files, links, etc.) or handling of edge cases will fail.
+Currently, fmerge can reliably keep two computers in sync, but still has numerous issues and is missing the following features:
 
-There are no smart merging algorithms yet.
+- Large file support (file size limited by RAM currently)
+- Automatic and clean termination of application
+- Daemon mode for server
 
 ## Author
 Me!
