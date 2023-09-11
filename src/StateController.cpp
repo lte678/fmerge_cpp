@@ -198,6 +198,7 @@ namespace fmerge {
             symlink_contents[ft_payload.payload_len] = '\0';
             if(symlink(symlink_contents, fullpath.c_str()) == -1) {
                 print_clib_error("symlink");
+                std::cerr << "^^^ " << fullpath << std::endl;
                 return;
             }
         } else {
