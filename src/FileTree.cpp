@@ -104,10 +104,11 @@ namespace fmerge {
         // Create a temporary parent if missing. Once this parent node is inserted later,
         // it will receive it's proper metadata.
         if(!parent_node) {
-            auto missing_folder = std::vector<std::string>(path_tokens.begin(), path_tokens.end() - 1);
+            auto missing_node = std::vector<std::string>(path_tokens.begin(), path_tokens.end() - 1);
+            parent_node = std::make_shared<DirNode>(MetadataNode(missing_node.back(), FileType::Directory, 0));
             insert_node(
-                missing_folder,
-                std::make_shared<DirNode>(MetadataNode(missing_folder.back(), FileType::Directory, 0))
+                missing_node,
+                parent_node
             );
         }
 
