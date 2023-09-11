@@ -95,6 +95,11 @@ namespace fmerge {
 
 
     bool DirNode::insert_node(std::vector<std::string> path_tokens, std::shared_ptr<DirNode> dir) {
+        if(!dir) {
+            std::cerr << "insert_node: attemped to insert null-dirnode" << std::endl;
+            return false;
+        }
+        
         // Get the parent node of the element to add
         auto parent_node = get_child_dir(
             std::vector<std::string>(path_tokens.begin(), path_tokens.end() - 1)
@@ -124,6 +129,11 @@ namespace fmerge {
 
 
     bool DirNode::insert_node(std::vector<std::string> path_tokens, std::shared_ptr<MetadataNode> file) {
+        if(!file) {
+            std::cerr << "insert_node: attemped to insert null-node" << std::endl;
+            return false;
+        }
+        
         // Get the parent node of the element to add
         auto parent_node = get_child_dir(
             std::vector<std::string>(path_tokens.begin(), path_tokens.end() - 1)
@@ -159,23 +169,27 @@ namespace fmerge {
         );
 
         if(!parent_node) {
-            std::cerr << "Parent node is missing for " << path_tokens.back() << std::endl;
-            return false;
+            // If the parent node does not exist, the file does not either
+            //std::cerr << "Parent node is missing for " << path_tokens.back() << std::endl;
+            return true;
         } 
 
         auto existing_file = parent_node->get_child_file(path_tokens.back());
         if(existing_file) {
-            std::remove(parent_node->files.begin(), parent_node->files.end(), existing_file);
+            auto match = std::find(parent_node->files.begin(), parent_node->files.end(), existing_file);
+            // match will always be valid
+            parent_node->files.erase(match);
             return true;
         }
-        auto existing_dir = get_child_dir(path_tokens.back());
+        auto existing_dir = parent_node->get_child_dir(path_tokens.back());
         if(existing_dir) {
-            std::remove(parent_node->subdirs.begin(), parent_node->subdirs.end(), existing_dir);
+            auto match = std::find(parent_node->subdirs.begin(), parent_node->subdirs.end(), existing_dir);
+            // match will always be valid
+            parent_node->subdirs.erase(match);
             return true;
         }
 
-        // Not a file or a directory, but fail silently.
-        return true;
+        return false;
     }
 
 
@@ -587,7 +601,9 @@ namespace fmerge {
 
 
     void remove_file_from_tree(std::shared_ptr<DirNode> root_node, const File& file) {
-        root_node->remove_node(split_path(file.path));
+        if(root_node->remove_node(split_path(file.path)) == false) {
+            termbuf() << "[Warning] Failed to delete " << file.path << " from file tree" << std::endl;
+        }
     }
 
 
