@@ -66,6 +66,10 @@ namespace fmerge {
 
         // Key for conflicting entry in the associated SortedChangeSet
         std::string conflict_key;
+
+        friend bool operator<(const Conflict& l, const Conflict& r) {
+            return l.conflict_key < r.conflict_key;
+        }
     };
 
     typedef std::unordered_map<std::string, ConflictResolution> ConflictResolutionSet;
@@ -97,6 +101,15 @@ namespace fmerge {
 
     // Simplify the list of file operations to be performed to a minimal set.
     SortedOperationSet squash_operations(const SortedOperationSet& ops);
+
+    /// @brief Sorts the given list of conflicts alphabetically according to their path. Useful for outputting to the user
+    /// and for calculating statistics of the dataset.
+    /// @param conflicts List of conflicts which is sorted in-place
+    void sort_conflicts_alphabetically(std::vector<Conflict>& conflicts);
+
+    /// @brief Prints the conflicts in a more easily readable form
+    /// @param conflicts Conflicts. Must be alphabetically sorted!
+    void print_conflicts(const std::vector<Conflict>& conflicts);
 
     /// Simplify the list of changes to the final resulting file
     /// @returns Timestamp of latest modification if file exists, or 0 if it is deleted.

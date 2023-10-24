@@ -25,6 +25,11 @@ namespace fmerge {
             const std::string &options, 
             std::function<void(char)> callback,
             std::function<void(void)> _cancel_callback = {});
+        std::string prompt_list_choice(const std::vector<std::pair<std::string, std::string>> options);
+        void prompt_list_choice_async(
+            const std::vector<std::pair<std::string, std::string>> options,
+            std::function<void(std::string)> callback,
+            std::function<void(void)> _cancel_callback = {});
         void cancel_prompt();
 
         // Overridden from std::streambuf

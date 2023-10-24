@@ -3,6 +3,7 @@
 #include "Terminal.h"
 
 #include <iomanip>
+#include <map>
 
 
 namespace fmerge {
@@ -222,6 +223,94 @@ namespace fmerge {
             }
         }
         return sqaushed_set;
+    }
+
+
+    void sort_conflicts_alphabetically(std::vector<Conflict>& conflicts) {
+        std::sort(conflicts.begin(), conflicts.end());
+    }
+
+
+    void print_conflicts(const std::vector<Conflict>& conflicts) {
+        constexpr int MAX_CONFLICTS = 500;
+
+
+        // Prints the subfolder if small enough, otherwise abbreviates it
+        std::function<std::vector<std::string>(
+                std::vector<Conflict>::const_reverse_iterator&,
+                std::vector<Conflict>::const_reverse_iterator,
+                std::vector<std::string>
+            )> _print_conflicts;
+        
+        _print_conflicts = [&_print_conflicts](
+            std::vector<Conflict>::const_reverse_iterator &it, 
+            std::vector<Conflict>::const_reverse_iterator it_end,
+            std::vector<std::string> path) {
+
+            std::vector<std::string> conflicts{};
+            while(it != it_end) {
+                auto path_tok = split_path(it->conflict_key);
+                path_tok.pop_back();
+                if(path_to_str(path_tok) != path_to_str(path)) {
+                    // Check if subdir
+                    if((path_tok.size() > path.size()) && 
+                        path_to_str(std::vector(path_tok.begin(), path_tok.begin() + path.size())) == path_to_str(path)) {
+                        // It is a subdir, process recursively
+                        auto subdir = std::vector(path_tok.begin(), path_tok.begin() + path.size() + 1);
+                        auto new_conflicts = _print_conflicts(it, it_end, subdir);
+                        conflicts.insert(conflicts.end(), new_conflicts.begin(), new_conflicts.end());
+                    } else {
+                        // We are done processing this sub dir
+                        auto nr_conflicts = conflicts.size();
+                        if(nr_conflicts > MAX_CONFLICTS) {
+                            conflicts.clear();
+                            conflicts.push_back(path_to_str(path) + "/... (not displaying 500+ more conflicts)");
+                            //conflicts.push_back("Abbreviated " + std::to_string(nr_conflicts) + " conflicts...");
+                        }
+                        return conflicts;
+                    }
+                } else {
+                    // A simple first-level subelement
+                    conflicts.push_back(it->conflict_key);
+                    it++;
+                }
+            }
+            return conflicts;
+        };
+
+        auto it = conflicts.rbegin();
+        auto printable = _print_conflicts(it, conflicts.rend(), std::vector<std::string>{});
+        termbuf() << "CONFLICTS:" << std::endl;
+        for(auto p : printable) {
+            termbuf() << p << std::endl;
+        }
+
+        // // Create a database of the sum of conflicts in each subfolder
+        // std::map<std::string, int> conflict_count{};
+
+        // // Populate the folders with their totals
+        // for(const auto& conflict : conflicts) {
+        //     auto toks = split_path(conflict.conflict_key);
+        //     toks.pop_back();
+        //     std::string conflict_folder = path_to_str(toks);
+        //     // Add the conflict to this folder's total
+        //     conflict_count[conflict_folder]++;
+        //     // Add the conflict to the parent folder totals
+        //     for(int i = 0; i < static_cast<int>(toks.size()); i++) {
+        //         auto parent_folder = path_to_str(std::vector(toks.begin(), toks.begin() + i));
+        //         conflict_count[parent_folder]++;
+        //     }
+        // }
+
+        // // Start abbreviating large trees using the computed totals
+        // // Sub folders always come after parent folders, so abbreviate backwards (smallest first)
+        // // If a folder needs to be abbreviated, all the subfolders are summed and subtracted from it's total
+        // for(auto counter = conflict_count.rbegin(); counter != conflict_count.rend(); counter++) {
+        //     if(counter->second > MAX_CONFLICTS) {
+        //         // Get the forward iterator
+        //         conflict_count.find(counter->first);
+        //     }
+        // }
     }
 
 

@@ -251,10 +251,10 @@ namespace fmerge {
         std::vector<Conflict> conflicts;
         while((conflicts = attempt_merge(sorted_local_changes, sorted_peer_changes, resolutions)).empty() == false) {
             std::cerr << "!!! Merge conflicts occured for the following paths:" << std::endl;
-            for(const auto &conflict : conflicts) { 
-                termbuf() << "    " << "CONFLICT  " << conflict.conflict_key << std::endl;
-            }
-        
+            sort_conflicts_alphabetically(conflicts);
+            print_conflicts(conflicts);
+            termbuf() << std::endl;
+
             auto user_resolutions = ask_for_resolutions(conflicts, sorted_local_changes, sorted_peer_changes);
             // This may be empty, then keep the existing resolutions
             if(!user_resolutions.empty()) {

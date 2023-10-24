@@ -129,6 +129,57 @@ namespace fmerge {
     }
 
 
+    string Terminal::prompt_list_choice(const std::vector<std::pair<string, string>> options) {
+        std::condition_variable flag;
+        std::mutex flag_m;
+        std::unique_lock<std::mutex> flag_lock(flag_m);
+
+        string response{""};
+
+        prompt_list_choice_async(options,
+        [&response, &flag](string _response) {
+            response = _response;
+            flag.notify_all();
+        },
+        [&response, &flag]() {
+            flag.notify_all();
+        });
+
+        flag.wait(flag_lock);
+        return response;
+    }
+
+
+    void Terminal::prompt_list_choice_async(
+        const std::vector<std::pair<string, string>> options,
+        std::function<void(string)> callback,
+        std::function<void(void)> _cancel_callback) {
+
+        auto put_prompt = [options]() {
+            for(const auto& opt : options) {
+                termbuf() << opt.first << ") " << opt.second << std::endl;
+            }
+            termbuf() << ">" << std::endl;
+        };
+
+        put_prompt();
+
+        istream_callback_lock.lock();
+        istream_callback = [this, options, callback, put_prompt](std::string response) {
+            for(const auto& opt: options) {
+                if(opt.first == response) {
+                    callback(response);
+                    return true;
+                }
+            }
+            termbuf() << "Invalid option." << std::endl;
+            put_prompt();
+            return false;
+        };
+        cancel_callback = _cancel_callback;
+        istream_callback_lock.unlock();
+    }
+
     void Terminal::cancel_prompt() {
         istream_callback_lock.lock();
         istream_callback = {};
