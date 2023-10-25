@@ -91,6 +91,11 @@ int client_mode(std::string path, std::string target_address) {
 }
 
 
+void atexit_handler() {
+    term()->kill_thread();
+}
+
+
 static struct option long_options[] {
     {"server", no_argument, 0, 's'},
     {"client", required_argument, 0, 0},
@@ -99,6 +104,13 @@ static struct option long_options[] {
 
 
 int main(int argc, char* argv[]) {
+    // Register exit handlers
+    if(std::atexit(atexit_handler)) {
+        std::cerr << "main: failed to register exit handler!" << std::endl;
+        return 1;
+    }
+
+    // Parse command line options
     int long_option_index{};
     int opt{};
 
@@ -159,6 +171,8 @@ int main(int argc, char* argv[]) {
         return client_mode(path_opt, target_address);
     }
 
-    termbuf() << "Usage: fmerge (-s|-c server_ip) [path]" << std::endl;
+    // Not using termbuf prevents an extra newline from being inserted
+    std::cout << "Usage: fmerge (-s|-c server_ip) [path]" << std::flush;
+    
     return 1;
 }

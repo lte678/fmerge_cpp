@@ -6,15 +6,25 @@
 #include <sstream>
 #include <thread>
 #include <mutex>
-
+#include <atomic>
+#include <signal.h>
 
 namespace fmerge {
 
     constexpr int DEFAULT_TERMINAL_WIDTH = 80;
 
     class Terminal : public std::stringbuf {
+        // NOTE: Make sure to call kill_thread() at program exit (otherwise execution will hang)
     public:
         Terminal(std::ostream& _os, std::istream& _is);
+
+        /// @brief Kill the cin listener thread. Must be called to terminate process if Terminal was used.
+        inline void kill_thread() {
+            sync();
+            if(!istream_listener_thread_created) return;
+            while(!istream_listener_thread.joinable()) {};
+            pthread_kill(istream_listener_thread.native_handle(), SIGINT);
+        }
 
         void start_progress_bar(std::string trailing = "");
         void update_progress_bar(float progress);
@@ -56,6 +66,7 @@ namespace fmerge {
 
         std::string progress_last_suffix{};
     
+        std::atomic_bool istream_listener_thread_created{false};
         std::thread istream_listener_thread{};
         // @returns true if the callback should be destroyed after being called.
         std::function<bool(std::string)> istream_callback{};

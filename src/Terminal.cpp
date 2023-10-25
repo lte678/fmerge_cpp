@@ -34,6 +34,7 @@ namespace fmerge {
         terminal_width = w.ws_col;
 
         // Create input listener thread
+        istream_listener_thread_created = true;
         istream_listener_thread = std::thread([this]() { istream_listener(); });
     }
 
@@ -195,7 +196,7 @@ namespace fmerge {
         while(true) {
             std::string user_input;
             is >> user_input;
-            
+
             // Forward to callback function
             istream_callback_lock.lock();
             if(istream_callback) {
