@@ -165,6 +165,10 @@ namespace fmerge {
 
         std::string fullpath = join_path(path, ft_payload.path);
 
+        if(debug_protocol) {
+            termbuf() << "[DEBUG] Received data for " << fullpath << std::endl;
+        }
+
         // Create folder for file
         auto path_tokens = split_path(fullpath);
         auto file_folder = join_path("/", path_to_str(std::vector<std::string>(path_tokens.begin(), path_tokens.end() - 1)));
@@ -294,6 +298,7 @@ namespace fmerge {
         //std::vector<Change> processed_changes{};
         unsigned long processed_change_count{0};
         term()->start_progress_bar("Syncing");
+
         for(const auto& file_ops : pending_operations) {
             if(processed_change_count % 250 == 0) {
                 term()->update_progress_bar(static_cast<float>(processed_change_count) / static_cast<float>(pending_operations.size()));

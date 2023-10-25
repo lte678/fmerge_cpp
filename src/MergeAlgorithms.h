@@ -3,6 +3,8 @@
 #include "FileTree.h"
 
 #include <unordered_map>
+#include <map>
+#include <functional>
 
 
 namespace fmerge {
@@ -39,7 +41,7 @@ namespace fmerge {
         friend std::ostream& operator<<(std::ostream& os, const FileOperation& fop);
     };
 
-    typedef std::unordered_map<std::string, std::vector<FileOperation>> SortedOperationSet;
+    typedef std::map<std::string, std::vector<FileOperation>, std::greater<std::string>> SortedOperationSet;
 
 
     enum class ConflictResolution {
