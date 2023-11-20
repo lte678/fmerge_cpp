@@ -77,6 +77,7 @@ namespace fmerge {
 
     extern std::ostream* _stream;
     extern Terminal* _stream_term;
+    void kill_term();
     Terminal* term();
     std::ostream& termbuf();
 }

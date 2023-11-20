@@ -171,7 +171,8 @@ namespace fmerge {
 
         // Create folder for file
         auto path_tokens = split_path(fullpath);
-        auto file_folder = join_path("/", path_to_str(std::vector<std::string>(path_tokens.begin(), path_tokens.end() - 1)));
+        auto file_folder = path_to_str(std::vector<std::string>(path_tokens.begin(), path_tokens.end() - 1));
+        termbuf() << file_folder << std::endl;
         if(!exists(file_folder)) {
             //termbuf() << "[Warning] Out of order file transfer. Creating folder for file that should already exist." << std::endl;
             if(!ensure_dir(file_folder)) {

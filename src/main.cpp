@@ -92,7 +92,7 @@ int client_mode(std::string path, std::string target_address) {
 
 
 void atexit_handler() {
-    term()->kill_thread();
+    kill_term();
 }
 
 
@@ -134,19 +134,19 @@ int main(int argc, char* argv[]) {
             mode = 1;
             target_address = optarg;
         } else if(opt == 'v') {
-            termbuf() << "Version " << MAJOR_VERSION << "." << MINOR_VERSION << std::endl;
+            std::cout << "Version " << MAJOR_VERSION << "." << MINOR_VERSION << std::endl;
             return 0;
         } else if(opt == 'd') {
             debug_protocol = true;
         } else if(opt == '?') {
             // We got an invalid option
             if(optopt == 'c') {
-                termbuf() << "Usage: fmerge (-s|-c server_ip) [path]" << std::endl;
+                std::cout << "Usage: fmerge (-s|-c server_ip) [path]" << std::endl;
                 return 1;
             }
             return 1;
         } else {
-            termbuf() << "getopt_long: " << static_cast<char>(opt) << std::endl;
+            std::cout << "getopt_long: " << static_cast<char>(opt) << std::endl;
         }
     }
     
@@ -155,12 +155,12 @@ int main(int argc, char* argv[]) {
         if(optind == (argc - 1)) {
             path_opt = argv[optind];
         } else if(optind == argc) {
-            termbuf() << "Missing path!" << std::endl;
-            termbuf() << "Usage: fmerge (-s|-c server_ip) [path]" << std::endl;
+            std::cout << "Missing path!" << std::endl;
+            std::cout << "Usage: fmerge (-s|-c server_ip) [path]" << std::endl;
             return 1;
         } else {
-            termbuf() << "Only one path may be supplied." << std::endl;
-            termbuf() << "Usage: fmerge (-s|-c server_ip) [path]" << std::endl;
+            std::cout << "Only one path may be supplied." << std::endl;
+            std::cout << "Usage: fmerge (-s|-c server_ip) [path]" << std::endl;
             return 1;
         }
     }

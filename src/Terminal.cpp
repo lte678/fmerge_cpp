@@ -22,6 +22,11 @@ namespace fmerge {
         }
         return *_stream;
     }
+    void kill_term() {
+        if(_stream_term != nullptr) {
+            _stream_term->kill_thread();
+        }
+    }
 
     constexpr int PROGRESS_BAR_WIDTH = 45; // Does not include trailing percentage
 
