@@ -1,4 +1,4 @@
-# fmerge [![Build](https://github.com/lte678/fmerge_cpp/actions/workflows/cmake-single-platform.yml/badge.svg)](https://github.com/lte678/fmerge_cpp/actions/workflows/cmake-single-platform.yml)
+# fmerge [![Build](https://github.com/lte678/fmerge_cpp/actions/workflows/cmake-build.yml/badge.svg)](https://github.com/lte678/fmerge_cpp/actions/workflows/cmake-build.yml) [![Tests](https://github.com/lte678/fmerge_cpp/actions/workflows/cmake-test.yml/badge.svg)](https://github.com/lte678/fmerge_cpp/actions/workflows/cmake-test.yml)
 _A file sync tool to keep folders synchronized across multiple computers_
 
 ---
