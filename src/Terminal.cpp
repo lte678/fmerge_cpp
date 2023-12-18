@@ -245,6 +245,8 @@ namespace fmerge {
         if(!persistent_footer.empty()) {
             os << persistent_footer << '\r';
         }
+
+        os << std::flush;
     }
 
 
