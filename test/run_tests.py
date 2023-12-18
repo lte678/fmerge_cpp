@@ -115,13 +115,9 @@ if __name__ == '__main__':
         shutil.rmtree('/tmp/fmerge_tests')
     except FileNotFoundError:
         pass
-    try:
-        shutil.rmtree('/tmp/fmerge_logs')
-    except FileNotFoundError:
-        pass
 
     # Create one log folder for all tests. It is persistent
-    Path('/tmp/fmerge_logs').mkdir()
+    Path('/tmp/fmerge_logs').mkdir(exist_ok=True)
     all_passed = True
     for test in targets:
         Path('/tmp/fmerge_tests').mkdir()
