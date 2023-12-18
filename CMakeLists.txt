@@ -5,6 +5,7 @@ project(fmerge)
 # Define folders
 set(EXT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ext)
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
 set(BIN_DIR ${CMAKE_CURRENT_BINARY_DIR}/bin)
 
 # Compiler settings
@@ -21,3 +22,7 @@ add_executable(${CMAKE_PROJECT_NAME} ${SOURCES})
 
 target_include_directories(${CMAKE_PROJECT_NAME} SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib)
 target_link_libraries(${CMAKE_PROJECT_NAME} uuid)
+
+# Test
+enable_testing()
+add_subdirectory(${TEST_DIR})

@@ -10,20 +10,24 @@
 import sys
 import os
 import subprocess
-import time
 from pathlib import Path
 import shutil
+import argparse
+from helpers import TEST_NG, TEST_OK, TestException
 from helpers.file_gen import bidir_conflictless
+import helpers.fmerge_wrapper as fmerge_wrapper
 
 SUPRESS_STDOUT = False
-
-TEST_NG = False
-TEST_OK = True
 
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 FMERGE_BINARY = os.path.normpath(os.path.join(SCRIPT_DIR, "../build/bin/fmerge"))
 TEST_PATH = Path('/tmp/fmerge_tests')
+LOG_DIR = Path('/tmp/fmerge_logs')
+
+###############################################################################
+###########################   Test Definitions   ##############################
+###############################################################################
 
 def test_check_version():
     res = subprocess.run([FMERGE_BINARY, '-v'], capture_output=True)
@@ -40,57 +44,86 @@ def test_check_version():
         return (TEST_NG, 'Fmerge did not print version')
 
 
-def test_bidir_medium_files():
-    # Transfer a moderately large number of medium sized files (reasonable good realistic workload)
+def test_bidir_small_files():
+    # Transfer a small number of small files as a simple test.
     # Do not use conflicts. Do not include subfolders
 
-    # Should execute in 60s
-    TEST_TIMEOUT = 5
-
-    # Step 1: Create dataset
-    bidir_conflictless(TEST_PATH, 200, 1024*1024, verbose=False)
-
-    # Step 2: Run two fmerge instances
-    p1 = subprocess.Popen([FMERGE_BINARY, '-s', (TEST_PATH / 'peer_a').as_posix()], stdout=subprocess.PIPE)
-    # Allow p1 to start listening for clients
-    time.sleep(5)
-    p2 = subprocess.Popen([FMERGE_BINARY, '-c', 'localhost', (TEST_PATH / 'peer_b').as_posix()], stdout=subprocess.PIPE)
-    time.sleep(1)
-    # Allow both processes to fail now before we check for a timeout
-
+    # Create dataset
+    bidir_conflictless(TEST_PATH, 10, 1024, verbose=False)
+    # Run client-server pair
     try:
-        res1 = p1.wait(timeout=TEST_TIMEOUT)
-    except subprocess.TimeoutExpired:
-        p1.kill()
-        out, _ = p1.communicate()
-        print(out.decode('ASCII'), end='')
-        return (TEST_NG, 'Fmerge timed out.')
-    res2 = p2.poll()
-    if res2 is None:
-        p2.kill()
-        out, _ = p2.communicate()
-        print(out.decode('ASCII'), end='')
-        return (TEST_NG, 'Fmerge timed out.')
-    if res1 != 0 or res2 != 0:
-        return (TEST_NG, f'Fmerge failed with error codes {res1} and {res2}.')
+        fmerge_wrapper.fmerge(FMERGE_BINARY, TEST_PATH, LOG_DIR / 'bidir_small_files', server_readiness_wait=1, timeout=3)
+    except TestException as e:
+        return (TEST_NG, str(e))
 
     return (TEST_OK, '')
 
 
+def test_bidir_medium_files():
+    # Transfer a moderately large number of medium sized files (reasonable good realistic workload)
+    # Do not use conflicts. Do not include subfolders
+
+    # Create dataset
+    bidir_conflictless(TEST_PATH, 200, 1024*1024, verbose=False)
+    # Run client-server pair
+    try:
+        fmerge_wrapper.fmerge(FMERGE_BINARY, TEST_PATH, LOG_DIR / 'bidir_medium_files', timeout=15)
+    except TestException as e:
+        return (TEST_NG, str(e))
+
+    return (TEST_OK, '')
+
+
+
+###############################################################################
+########################   Start of Test Harness   ############################
+###############################################################################
+
 system_tests = [
     test_check_version,
+    test_bidir_small_files,
     test_bidir_medium_files
 ]
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        prog='run_tests.py',
+        description='Run system tests for Fmerge',
+        epilog='Multiple tests can be specified at once')
+    for test in system_tests:
+        option_string = test.__name__.replace('_', '-')
+        parser.add_argument(f'--{option_string}', dest='targets', action='append_const', const=test)
+    parser.add_argument('--all', action='store_true')
+
+    args = parser.parse_args()
+
+    if args.all and args.targets is not None:
+        print('Specify EITHER --all or any number of specific tests')
+        sys.exit(1)
+    
+    if args.all:
+        targets = system_tests
+    elif args.targets is not None:
+        targets = args.targets
+    else:
+        print('No test specified')
+        sys.exit(1)
+    
+    # Start of tests
     try:
         shutil.rmtree('/tmp/fmerge_tests')
     except FileNotFoundError:
         pass
+    try:
+        shutil.rmtree('/tmp/fmerge_logs')
+    except FileNotFoundError:
+        pass
 
+    # Create one log folder for all tests. It is persistent
+    Path('/tmp/fmerge_logs').mkdir()
     all_passed = True
-    for test in system_tests:
+    for test in targets:
         Path('/tmp/fmerge_tests').mkdir()
 
         print(f'Running {test.__name__}... ', end='')
