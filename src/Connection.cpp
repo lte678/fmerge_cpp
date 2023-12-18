@@ -2,6 +2,7 @@
 
 #include "Terminal.h"
 #include "Errors.h"
+#include "Globals.h"
 #include "protocol/NetProtocolRegistry.h"
 
 #include <sys/socket.h>
@@ -53,7 +54,7 @@ namespace fmerge {
         MessageHeader(msg).serialize(send_func);
         msg->serialize(send_func);
         transmit_lock.unlock();
-        if(debug_protocol) {
+        if(g_debug_protocol) {
             termbuf() << "[Peer <- Local] Sending " << msg->type() << std::endl;
         }
     }
@@ -91,7 +92,7 @@ namespace fmerge {
                 auto received_header = MessageHeader::deserialize(receive_func);
                 auto received_packet = protocol::deserialize_packet(received_header.type, received_header.length, receive_func);
 
-                if(debug_protocol) {
+                if(g_debug_protocol) {
                     termbuf() << "[Peer -> Local] Received " << received_header.type << std::endl;
                 }
                 // Received message from peer

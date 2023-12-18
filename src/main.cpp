@@ -1,10 +1,10 @@
 #include "Filesystem.h"
 #include "FileTree.h"
-#include "Version.h"
 #include "Connection.h"
 #include "Config.h"
 #include "StateController.h"
 #include "Terminal.h"
+#include "Globals.h"
 
 #include <unistd.h>
 #include <getopt.h>
@@ -23,7 +23,8 @@ using namespace fmerge;
 
 
 namespace fmerge {
-    bool debug_protocol{false};
+    bool g_debug_protocol{false};
+    bool g_ask_confirmation{true};
 }
 
 
@@ -97,10 +98,35 @@ void atexit_handler() {
 
 
 static struct option long_options[] {
-    {"server", no_argument, 0, 's'},
-    {"client", required_argument, 0, 0},
-    {0, 0, 0, 0},
+    {"server" , no_argument      , 0, 's'},
+    {"client" , required_argument, 0, 'c'},
+    {"help"   , no_argument      , 0, 'h'},
+    {"version", no_argument      , 0, 'v'},
+    {0        , 0                , 0,  0 },
 };
+
+
+void print_usage() {
+    std::cout << "Usage: fmerge [OPTION] (-s|-c server_ip) [PATH]" << std::endl;
+}
+
+
+void print_help() {
+    print_usage();
+    std::cout << "Synchronizes file changes bidirectionally between two folders over the network." << std::endl;
+    std::cout << std::endl;
+
+    std::cout << " -h, --help                   Show this help" << std::endl;
+    std::cout << " -v, --version                Output version" << std::endl;
+    std::cout << " -c, --client [server addr.]  Start in client mode and connect to server addr." << std::endl;
+    std::cout << " -s, --server                 Start in server mode" << std::endl;
+    std::cout << " -y                           Do not prompt the user for confirmation (be careful!)" << std::endl;
+    std::cout << " -d                           Put into debug mode" << std::endl;
+    std::cout << std::endl;
+    std::cout << "The application works in a client/server configuration. To use, first start a server instance and once it is ready, start the client" << std::endl;
+    std::cout << std::endl;
+    std::cout << "Written by Leon Teichroeb o7" << std::endl;
+}
 
 
 int main(int argc, char* argv[]) {
@@ -119,8 +145,11 @@ int main(int argc, char* argv[]) {
     std::string target_address{};
     std::string path_opt{};
 
-    while((opt = getopt_long(argc, argv, "sc:vd", long_options, &long_option_index)) != -1) {
-        if(opt == 's') {
+    while((opt = getopt_long(argc, argv, "hvsc:yd", long_options, &long_option_index)) != -1) {
+        if(opt == 'h') {
+            print_help();
+            return 0;
+        } else if(opt == 's') {
             if(mode != -1) {
                 std::cerr << "Cannot set multiple server and/or client flags." << std::endl;
                 return 1;
@@ -136,12 +165,14 @@ int main(int argc, char* argv[]) {
         } else if(opt == 'v') {
             std::cout << "Version " << MAJOR_VERSION << "." << MINOR_VERSION << std::endl;
             return 0;
+        } else if(opt == 'y') {
+            g_ask_confirmation = false;
         } else if(opt == 'd') {
-            debug_protocol = true;
+            g_debug_protocol = true;
         } else if(opt == '?') {
             // We got an invalid option
             if(optopt == 'c') {
-                std::cout << "Usage: fmerge (-s|-c server_ip) [path]" << std::endl;
+                print_usage();
                 return 1;
             }
             return 1;
@@ -151,20 +182,22 @@ int main(int argc, char* argv[]) {
     }
     
 
+    // Check number of path options supplied
     if(mode == 0 || mode == 1) {
         if(optind == (argc - 1)) {
             path_opt = argv[optind];
         } else if(optind == argc) {
             std::cout << "Missing path!" << std::endl;
-            std::cout << "Usage: fmerge (-s|-c server_ip) [path]" << std::endl;
+            print_usage();
             return 1;
         } else {
             std::cout << "Only one path may be supplied." << std::endl;
-            std::cout << "Usage: fmerge (-s|-c server_ip) [path]" << std::endl;
+            print_usage();
             return 1;
         }
     }
 
+    // Run server
     if(mode == 0) {
         return server_mode(path_opt);
     } else if(mode == 1) {
@@ -172,7 +205,6 @@ int main(int argc, char* argv[]) {
     }
 
     // Not using termbuf prevents an extra newline from being inserted
-    std::cout << "Usage: fmerge (-s|-c server_ip) [path]" << std::flush;
-    
+    print_usage();
     return 1;
 }

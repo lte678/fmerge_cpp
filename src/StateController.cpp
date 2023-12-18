@@ -2,8 +2,8 @@
 
 #include "ConflictResolver.h"
 #include "Errors.h"
-#include "Version.h"
 #include "Terminal.h"
+#include "Globals.h"
 #include "protocol/NetProtocolRegistry.h"
 
 #include <memory>
@@ -32,7 +32,13 @@ namespace fmerge {
         do_merge();
 
         wait_for_state(State::SyncUserWait);
-        ask_proceed();
+        if(g_ask_confirmation) {
+            ask_proceed();
+        } else {
+            state_lock.lock();
+            state = State::SyncingFiles;
+            state_lock.unlock();
+        }
 
         wait_for_state(State::SyncingFiles);
         termbuf() << "Performing file sync. This may take a while..." << std::endl;
@@ -165,7 +171,7 @@ namespace fmerge {
 
         std::string fullpath = join_path(path, ft_payload.path);
 
-        if(debug_protocol) {
+        if(g_debug_protocol) {
             termbuf() << "[DEBUG] Received data for " << fullpath << std::endl;
         }
 
