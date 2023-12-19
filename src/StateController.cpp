@@ -19,7 +19,10 @@ namespace fmerge {
     }
 
     void StateController::run() {
-        c->listen([this](auto msg) { handle_message(msg); });
+        c->listen(
+            [this](auto msg) { handle_message(msg); },
+            [this]() { handle_peer_disconnect(); }
+        );
 
         termbuf() << "Checking version" << std::endl;
         send_version();
@@ -65,6 +68,20 @@ namespace fmerge {
         } else {
             termbuf() << "[Error] Received invalid message with type " << msg->type() << std::endl;
         }
+    }
+
+
+    void StateController::handle_peer_disconnect() {
+        if(g_debug_protocol) {
+            termbuf() << "[DEBUG] Peer disconnected." << std::endl;
+        }
+
+        auto s = state.load();
+        if(s != State::Finished && s != State::Exiting) {
+            std::cerr << "[Error] Peer disconnected unexpectedly!" << std::endl;
+            exit(1);
+        }
+        // Otherwise, there is nothing to handle.
     }
 
 

@@ -33,6 +33,8 @@ namespace fmerge {
         void handle_file_request_message(std::shared_ptr<protocol::FileRequestMessage> msg);
         void handle_resolutions_message(std::shared_ptr<protocol::ConflictResolutionsMessage> msg);
 
+        void handle_peer_disconnect();
+
         // Message handling helper functions
         std::shared_ptr<protocol::FileTransferMessage> create_file_transfer_message(std::string path);
 

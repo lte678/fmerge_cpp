@@ -42,6 +42,11 @@ namespace fmerge {
         if(listener_thread_handle.joinable()) {
             listener_thread_handle.join();
         }
+        join_finished_workers();
+        
+        if(resp_handler_workers.size() != 0) {
+            std::cerr << "[Error] Connection terminated with " << resp_handler_workers.size() << " living threads!" << std::endl;
+        }   
     }
 
 
@@ -73,12 +78,12 @@ namespace fmerge {
     }
 
 
-    void Connection::listen(ReceiveCallback callback) {
-        listener_thread_handle = std::thread([=]() { listener_thread(callback); });
+    void Connection::listen(ReceiveCallback callback, std::function<void(void)> terminate_callback) {
+        listener_thread_handle = std::thread([=]() { listener_thread(callback, terminate_callback); });
     }
 
 
-    void Connection::listener_thread(ReceiveCallback callback) {
+    void Connection::listener_thread(ReceiveCallback callback, std::function<void(void)> terminate_callback) {
         // To prevent the application from locking up, this thread must always return back to a state of listening
         // without any blocking writes. Otherwise the two clients can deadlock.
         //
@@ -108,8 +113,7 @@ namespace fmerge {
                 });
             }
         } catch(const connection_terminated_exception& e) {
-            termbuf() << "Exited: " << e.what() << std::endl;
-            exit(0);
+            terminate_callback();
         }
     }
 

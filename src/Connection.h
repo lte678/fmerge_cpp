@@ -38,7 +38,7 @@ namespace fmerge {
         void join_finished_workers();
 
         std::atomic<bool> disconnect{false};
-        void listener_thread(ReceiveCallback callback);
+        void listener_thread(ReceiveCallback callback, std::function<void(void)> terminate_callback);
 
         // Blocking receive that is guaranteed to return the requested number of bytes
         // May throw an exception if the peer disconnects.
@@ -49,7 +49,7 @@ namespace fmerge {
         int get_fd() { return fd; };
     public:
         void send_message(std::shared_ptr<protocol::GenericMessage> msg);
-        void listen(ReceiveCallback callback);
+        void listen(ReceiveCallback callback, std::function<void(void)> terminate_callback);
 
         std::string get_address() { return address; };
     };

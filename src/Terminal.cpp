@@ -1,3 +1,5 @@
+#include "Errors.h"
+
 #include "Terminal.h"
 
 #include <cmath>
@@ -198,19 +200,37 @@ namespace fmerge {
 
 
     void Terminal::istream_listener() {
-        while(true) {
-            std::string user_input;
-            is >> user_input;
+        // Ignore SIGINT (only used to stop the blocking read)
+        auto handle_int = [](int){};
+        struct sigaction int_handler;
+        sigemptyset(&int_handler.sa_mask);
+        int_handler.sa_flags = 0;
+        int_handler.sa_handler = handle_int;
+        sigaction(SIGINT, &int_handler, 0);
 
-            // Forward to callback function
-            istream_callback_lock.lock();
-            if(istream_callback) {
-                // True indicates the callback should be disabled after this
-                if(istream_callback(user_input)) {
-                    istream_callback = {};
+        std::string user_string;
+        while(true) {
+            char user_char;
+            int ret = read(STDIN_FILENO, &user_char, 1);
+            if(ret > 0) {
+                if(user_char == '\n') {
+                    // Forward to callback function
+                    istream_callback_lock.lock();
+                    if(istream_callback) {
+                        // True indicates the callback should be disabled after this
+                        if(istream_callback(user_string)) {
+                            istream_callback = {};
+                        }
+                    }
+                    istream_callback_lock.unlock();
+                } else {
+                    user_string.push_back(user_char);
                 }
+            } else if(ret == -1) {
+                if(errno == EINTR) return;
+                
+                print_clib_error("read");
             }
-            istream_callback_lock.unlock();
         }
     }
 

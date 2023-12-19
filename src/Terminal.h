@@ -24,6 +24,7 @@ namespace fmerge {
             if(!istream_listener_thread_created) return;
             while(!istream_listener_thread.joinable()) {};
             pthread_kill(istream_listener_thread.native_handle(), SIGINT);
+            istream_listener_thread.join();
         }
 
         void start_progress_bar(std::string trailing = "");
