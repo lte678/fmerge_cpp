@@ -47,6 +47,8 @@ namespace fmerge {
         // Wait for the next state to be activated asynchronously, usually by completion of a thread or peer message
         void wait_for_state(State target_state);
 
+        std::atomic_bool peer_finished{false};
+
         // Cross-thread state
         std::mutex state_lock; // Used for all non-constant members.
 

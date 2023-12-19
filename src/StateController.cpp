@@ -45,7 +45,7 @@ namespace fmerge {
         do_sync();
 
         termbuf() << "Waiting for peer to complete" << std::endl;
-        wait_for_state(State::Finished);
+        wait_for_state(State::Exiting);
     }
 
 
@@ -159,6 +159,14 @@ namespace fmerge {
             state_lock.lock();
             state = State::SyncingFiles;
             state_lock.unlock();
+        } else if(msg->get_payload().state == State::SyncingFiles) {
+            peer_finished.store(true);
+
+            if(state.load() == State::Finished) {
+                state_lock.lock();
+                state = State::Exiting;
+                state_lock.unlock();
+            }
         } else {
             std::cerr << "Error: Received unknown exit state message from peer" << std::endl;
         }
@@ -273,11 +281,21 @@ namespace fmerge {
         });
 
         syncer->perform_sync();
+        // Notify our peer that we are done
+        c->send_message(std::make_shared<ExitingStateMessage>(state.load()));
 
         term()->complete_progress_bar();
 
         write_changes(path, recombine_changes_by_file(sorted_local_changes));
         termbuf() << "Saved changes to disk" << std::endl;
+
+        state_lock.lock();
+        if(peer_finished.load()) {
+            state = State::Exiting;
+        } else {
+            state = State::Finished;
+        }
+        state_lock.unlock();
     }
 
 

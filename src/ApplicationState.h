@@ -6,5 +6,6 @@ enum class State {
     ResolvingConflicts,
     SyncUserWait,
     SyncingFiles,
-    Finished
+    Finished,
+    Exiting,
 };
