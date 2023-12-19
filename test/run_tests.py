@@ -91,6 +91,8 @@ if __name__ == '__main__':
         prog='run_tests.py',
         description='Run system tests for Fmerge',
         epilog='Multiple tests can be specified at once')
+    parser.add_argument(f'--keep', action='store_true', help='Keep the testing files generated during the test. Only works for individual tests.')    
+
     for test in system_tests:
         option_string = test.__name__.replace('_', '-')
         parser.add_argument(f'--{option_string}', dest='targets', action='append_const', const=test)
@@ -108,6 +110,10 @@ if __name__ == '__main__':
         targets = args.targets
     else:
         print('No test specified')
+        sys.exit(1)
+
+    if len(targets) > 1 and args.keep:
+        print("Only one test may be specified with the keep option")
         sys.exit(1)
     
     # Start of tests
@@ -136,7 +142,8 @@ if __name__ == '__main__':
             print(f'  Failure Message: {msg}')
             all_passed = False
         
-        shutil.rmtree('/tmp/fmerge_tests')
+        if not args.keep:
+            shutil.rmtree('/tmp/fmerge_tests')
 
     if not all_passed:
         print("")
