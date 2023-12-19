@@ -3,32 +3,42 @@
 #include <array>
 #include <ostream>
 #include <iomanip>
+#include <mutex>
+#include <condition_variable>
 
 
 namespace fmerge {
+    
+    std::string to_string(std::array<unsigned char, 16> uuid);
 
-    static std::string to_string(std::array<unsigned char, 16> uuid) {
-        std::stringstream out{};
-        for(int i = 0; i < 4; i++) {
-            out << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(uuid[i]);
-        }
-        out << "-";
-        for(int i = 4; i < 6; i++) {
-            out << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(uuid[i]);
-        }
-        out << "-";
-        for(int i = 6; i < 8; i++) {
-            out << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(uuid[i]);
-        }
-        out << "-";
-        for(int i = 8; i < 10; i++) {
-            out << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(uuid[i]);
-        }
-        out << "-";
-        for(int i = 10; i < 16; i++) {
-            out << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(uuid[i]);
-        }
-        return out.str();
-    }
 
+    class SyncBarrier {
+    public:
+        SyncBarrier() : timeout(0) {}
+        SyncBarrier(int _timeout) : timeout(_timeout) {}
+
+        // Waits until notified (either before or after we start waiting).
+        // Returns true if it timed out.
+        inline bool wait() {
+            std::unique_lock lk(mtx);
+            if(timeout <= 0) {
+                cv.wait(lk, [this]{ return proceed; });
+            } else {
+                auto cond = cv.wait_for(lk, std::chrono::seconds(timeout), [this]{ return proceed; });
+                if(cond == false) return true;
+            }
+            return false;
+        }
+
+        inline void notify() {
+            std::lock_guard lk(mtx);
+            proceed = true;
+            cv.notify_all();
+        }
+    private:
+        bool proceed;
+        std::mutex mtx;
+        std::condition_variable cv;
+        int timeout;
+    };
 }

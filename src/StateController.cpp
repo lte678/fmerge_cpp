@@ -167,67 +167,19 @@ namespace fmerge {
 
     void StateController::handle_file_transfer_message(std::shared_ptr<FileTransferMessage> msg) {
         //termbuf() << "Received " << filepath << " from peer (" << ft_msg->payload_len << " bytes) " << std::endl;
-        auto& ft_payload = msg->get_payload();
 
-        std::string fullpath = join_path(path, ft_payload.path);
-
-        if(g_debug_protocol) {
-            termbuf() << "[DEBUG] Received data for " << fullpath << std::endl;
-        }
-
-        // Create folder for file
-        auto path_tokens = split_path(fullpath);
-        auto file_folder = path_to_str(std::vector<std::string>(path_tokens.begin(), path_tokens.end() - 1));
-        termbuf() << file_folder << std::endl;
-        if(!exists(file_folder)) {
-            //termbuf() << "[Warning] Out of order file transfer. Creating folder for file that should already exist." << std::endl;
-            if(!ensure_dir(file_folder)) {
-                std::cerr << "[Error] Failed to create directory " << file_folder << std::endl;
-                return;
-            }
-        }
-
-        if(ft_payload.ftype == FileType::Directory) {
-            // Create folder
-            if(!ensure_dir(fullpath)) {
-                return;
-            }
-        } else if(ft_payload.ftype == FileType::File) {
-            // Create file
-            std::ofstream out_file(fullpath, std::ofstream::binary);
-            if(out_file) {
-                out_file.write(reinterpret_cast<char*>(ft_payload.payload.get()), ft_payload.payload_len);
+        state_lock.lock();
+        auto s = state.load();
+        state_lock.unlock();
+        if(s == State::SyncingFiles) {
+            if(syncer) {
+                syncer->submit_file_transfer(msg->get_payload());
             } else {
-                std::cerr << "[Error] Could not open file " << fullpath << " for writing." << std::endl;
-                return;
-            }
-        } else if(ft_payload.ftype == FileType::Link) {
-            // Create symlink
-            // Warning: Payload is not null-terminated
-            char symlink_contents[ft_payload.payload_len + 1];
-            memcpy(symlink_contents, ft_payload.payload.get(), ft_payload.payload_len);
-            symlink_contents[ft_payload.payload_len] = '\0';
-            // Delete if exists
-            if(exists(fullpath)) {
-                if(unlink(fullpath.c_str()) == -1) {
-                    print_clib_error("unlink");
-                    std::cerr << "^^^ " << fullpath << std::endl;
-                    return;
-                }
-            }
-            // Create link
-            if(symlink(symlink_contents, fullpath.c_str()) == -1) {
-                print_clib_error("symlink");
-                std::cerr << "^^^ " << fullpath << std::endl;
-                return;
+                std::cerr << "[Error] Invalid 'syncer' object" << std::endl;
             }
         } else {
-            std::cerr << "[Error] Received unknown file type in FileTransfer response! (" << static_cast<int>(ft_payload.ftype) << ")" << std::endl;
-            return;
+            std::cerr << "[Error] Invalid file transfer message before we have entered the SyncingFiles state." << std::endl;
         }
-
-        // TODO: Return error codes
-        set_timestamp(fullpath, ft_payload.mod_time, ft_payload.access_time);
     }
 
 
@@ -304,47 +256,27 @@ namespace fmerge {
         // Contains the changes that have been committed to disk
         //std::vector<Change> processed_changes{};
         unsigned long processed_change_count{0};
-        term()->start_progress_bar("Syncing");
+        unsigned long total_changes{pending_operations.size()};
+        term()->start_progress_bar("Syncing");        
 
-        for(const auto& file_ops : pending_operations) {
-            if(processed_change_count % 250 == 0) {
-                term()->update_progress_bar(static_cast<float>(processed_change_count) / static_cast<float>(pending_operations.size()));
+        syncer = std::make_unique<Syncer>(pending_operations, path, *c, [this, &processed_change_count, total_changes](std::string file, bool successful) {
+            // Update file change log
+            if(successful) {
+                sorted_local_changes.insert_or_assign(file, pending_changes.at(file));
             }
-            
-            // For us to accurately reproduce the new file history, all operations
-            // have to be executed successfully. If this fails, we will have to resolve it
-            // or leave the file history in a dirty state, which will be corrected at
-            // the next database rebuild and merge. 
-            bool all_successfull{true};
-            for(const auto& op : file_ops.second) {
-                std::string filepath{op.path};
-                if(op.type == FileOperationType::Delete) {
-                    if(remove_path(join_path(path, filepath))) {
-                        // Removal succeeded
-                    } else {
-                        all_successfull = false;
-                    }
-                } else if(op.type == FileOperationType::Transfer) {
-                    c->send_message(
-                        std::make_shared<FileRequestMessage>(filepath)
-                    );
-                } else {
-                    std::cerr << "[Error] Could not perform unknown file operation " << op.type << std::endl;
-                    all_successfull = false;
-                }
-            }
-            if(all_successfull) {
-                // file_ops.first = path
-                sorted_local_changes.insert_or_assign(file_ops.first, pending_changes.at(file_ops.first));
-            } else {
-                std::cerr << "[Error] File " << file_ops.first << " is in a conflicted state!" << std::endl;
-            }
+
+            // Update status bar
             processed_change_count++;
-        }
+            if(processed_change_count % 250 == 0) {
+                term()->update_progress_bar(static_cast<float>(processed_change_count) / static_cast<float>(total_changes));
+            }
+        });
+
+        syncer->perform_sync();
+
         term()->complete_progress_bar();
 
         write_changes(path, recombine_changes_by_file(sorted_local_changes));
-
         termbuf() << "Saved changes to disk" << std::endl;
     }
 

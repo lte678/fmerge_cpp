@@ -5,6 +5,7 @@
 #include "protocol/NetProtocol.h"
 #include "MergeAlgorithms.h"
 #include "ApplicationState.h"
+#include "Syncer.h"
 
 #include <thread>
 #include <atomic>
@@ -60,6 +61,9 @@ namespace fmerge {
         // Each operation also has changes associated with it
         SortedOperationSet pending_operations;
         SortedChangeSet pending_changes;
+
+        // Class to perform file sync
+        std::unique_ptr<Syncer> syncer;
 
         // These start out empty for the first pass
         std::unordered_map<std::string, ConflictResolution> resolutions;
