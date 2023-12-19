@@ -1,17 +1,19 @@
 #pragma once
 
+#include "Errors.h"
+
 #include <array>
 #include <ostream>
 #include <iomanip>
 #include <mutex>
 #include <condition_variable>
-
+#include <signal.h>
 
 namespace fmerge {
-    
+
     std::string to_string(std::array<unsigned char, 16> uuid);
 
-
+    void register_trivial_sigint();
     class SyncBarrier {
     public:
         SyncBarrier() : timeout(0) {}

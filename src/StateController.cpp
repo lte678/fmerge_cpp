@@ -24,31 +24,42 @@ namespace fmerge {
             [this]() { handle_peer_disconnect(); }
         );
 
-        termbuf() << "Checking version" << std::endl;
-        send_version();
 
-        wait_for_state(State::SendTree);
-        termbuf() << "Sending file tree" << std::endl;
-        send_filetree();
-
-        wait_for_state(State::ResolvingConflicts);
-        do_merge();
-
-        wait_for_state(State::SyncUserWait);
-        if(g_ask_confirmation) {
-            ask_proceed();
-        } else {
-            state_lock.lock();
-            state = State::SyncingFiles;
-            state_lock.unlock();
-        }
-
-        wait_for_state(State::SyncingFiles);
-        termbuf() << "Performing file sync. This may take a while..." << std::endl;
-        do_sync();
-
-        termbuf() << "Waiting for peer to complete" << std::endl;
-        wait_for_state(State::Exiting);
+        while(true) {
+            auto old_state = state.load();
+            switch(old_state) {
+            case State::AwaitingVersion:
+                termbuf() << "Checking version" << std::endl;
+                send_version();
+                break;
+            case State::SendTree:
+                termbuf() << "Sending file tree" << std::endl;
+                send_filetree();
+                break;
+            case State::ResolvingConflicts:
+                do_merge();
+                break;
+            case State::SyncUserWait:
+                if(g_ask_confirmation) {
+                    ask_proceed();
+                } else {
+                    state_lock.lock();
+                    state = State::SyncingFiles;
+                    state_lock.unlock();
+                }
+                break;
+            case State::SyncingFiles:
+                termbuf() << "Performing file sync. This may take a while..." << std::endl;
+                do_sync();
+                termbuf() << "Waiting for peer to complete" << std::endl;
+                break;
+            case State::Finished:
+                break;
+            case State::Exiting:
+                return;
+            }
+            wait_for_state_change(old_state);
+        }    
     }
 
 
@@ -77,6 +88,13 @@ namespace fmerge {
         }
 
         auto s = state.load();
+        if(s == State::SyncUserWait) {
+            termbuf() << "Operation cancelled by peer" << std::endl;
+            state_lock.lock();
+            state = State::Exiting;
+            state_lock.unlock();
+            return;
+        }
         if(s != State::Finished && s != State::Exiting) {
             std::cerr << "[Error] Peer disconnected unexpectedly!" << std::endl;
             exit(1);
@@ -324,15 +342,16 @@ namespace fmerge {
                 state = State::SyncingFiles;
                 state_lock.unlock();
             } else {
-                termbuf() << "Exiting..." << std::endl;
-                exit(0);
+                state_lock.lock();
+                state = State::Exiting;
+                state_lock.unlock();
             }
         });
     }
 
 
-    void StateController::wait_for_state(State target_state) {
-        while(target_state != state) {
+    void StateController::wait_for_state_change(State current_state) {
+        while(current_state == state) {
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
     }

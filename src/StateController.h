@@ -47,7 +47,7 @@ namespace fmerge {
         void ask_proceed();
 
         // Wait for the next state to be activated asynchronously, usually by completion of a thread or peer message
-        void wait_for_state(State target_state);
+        void wait_for_state_change(State current_state);
 
         std::atomic_bool peer_finished{false};
 

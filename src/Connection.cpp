@@ -3,6 +3,7 @@
 #include "Terminal.h"
 #include "Errors.h"
 #include "Globals.h"
+#include "Util.h"
 #include "protocol/NetProtocolRegistry.h"
 
 #include <sys/socket.h>
@@ -39,7 +40,9 @@ namespace fmerge {
 
     Connection::~Connection() {
         disconnect = true;
+        
         if(listener_thread_handle.joinable()) {
+            pthread_kill(listener_thread_handle.native_handle(), SIGINT);
             listener_thread_handle.join();
         }
         join_finished_workers();
@@ -90,6 +93,8 @@ namespace fmerge {
         // This would imply creating infinite threads, if we just put each write into a new thread.
         // Thus, we should block on creating new requests, so we can also limit the max number of responses that we can
         // possibly receive.
+
+        register_trivial_sigint();
 
         try {
             while(true) {

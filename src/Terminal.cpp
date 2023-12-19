@@ -1,5 +1,6 @@
 #include "Errors.h"
 
+#include "Util.h"
 #include "Terminal.h"
 
 #include <cmath>
@@ -201,12 +202,7 @@ namespace fmerge {
 
     void Terminal::istream_listener() {
         // Ignore SIGINT (only used to stop the blocking read)
-        auto handle_int = [](int){};
-        struct sigaction int_handler;
-        sigemptyset(&int_handler.sa_mask);
-        int_handler.sa_flags = 0;
-        int_handler.sa_handler = handle_int;
-        sigaction(SIGINT, &int_handler, 0);
+        register_trivial_sigint();
 
         std::string user_string;
         while(true) {
