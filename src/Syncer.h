@@ -24,6 +24,7 @@ namespace fmerge {
 
         void perform_sync();
         void submit_file_transfer(const protocol::FileTransferPayload &ft_payload);
+        bool _submit_file_transfer(const protocol::FileTransferPayload &ft_payload);
     private:
         SortedOperationSet &queued_operations;
         std::mutex operations_mtx;
@@ -33,7 +34,8 @@ namespace fmerge {
 
         std::vector<std::thread> worker_threads;
         // This map of flags is used to signify to the waiting worker thread that the file has been transferred
-        std::unordered_map<std::string, SyncBarrier> file_transfer_flags;
+        std::unordered_map<std::string, SyncBarrier<bool>> file_transfer_flags;
+        std::mutex ft_flag_mtx;
 
         std::string base_path;
         Connection &peer_conn;

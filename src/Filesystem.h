@@ -56,7 +56,7 @@ namespace fmerge {
     bool set_timestamp(std::string filepath, long mod_time, long access_time);
     bool exists(std::string filepath);
     bool remove_path(std::string path);
-    bool ensure_dir(std::string path);
+    bool ensure_dir(std::string path, bool allow_exists = false);
     long get_timestamp_now();
 
     void _for_file_in_dir(std::string basepath, std::string prefix, std::function<void(File, const FileStats&)> f);

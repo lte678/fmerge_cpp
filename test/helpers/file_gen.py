@@ -39,8 +39,69 @@ def bidir_conflictless(path, number_of_files, payload_size, verbose=True):
         print('Done!')
 
 
+def bidir_conflictless_subdirs(path, subdir_levels, subir_base_count, subdir_file_count, payload_size, verbose=True, only_last_leaf=False):
+    """
+    Generate the following file tree:
+    [base]
+      [child1]
+        [child1  ]
+          file1 
+          file...
+          filek
+        [child...]
+          ...
+        [childn  ]
+      [child...]
+        [child1  ]
+        [child...]
+        [childn  ]
+      [childn  ]
+        ...
+      file1 
+      file...
+      filek 
+    """
+
+    def create_recursive_dirs(path, subdir_levels, subir_base_count, subdir_file_count, payload, suffix):
+        if not only_last_leaf or subdir_levels == 0:
+            for i in range(subdir_file_count):
+                # Create files
+                with (path / f'file_{i:04}{suffix}').open('wb') as f:
+                    f.write(payload)
+        if subdir_levels != 0:
+            for i in range(subir_base_count):
+                # Create subdirs
+                child_path = path / f'child_dir_{i:04}'
+                child_path.mkdir()
+                create_recursive_dirs(child_path, subdir_levels-1, subir_base_count, subdir_file_count, payload, suffix)
+
+    peer_a = path / 'peer_a'
+    peer_b = path / 'peer_b'
+
+    try:
+        peer_a.mkdir()
+        peer_b.mkdir()
+    except FileExistsError:
+        if verbose:
+            print('Please clean the working directory before generating the dataset.')
+        return
+    
+    if verbose:
+        print(f'Generating files @ {payload_size} bytes...')
+
+    payload = b'\xFF' * payload_size 
+
+    # Generate the files
+    create_recursive_dirs(peer_a, subdir_levels, subir_base_count, subdir_file_count, payload, 'a')
+    create_recursive_dirs(peer_b, subdir_levels, subir_base_count, subdir_file_count, payload, 'b')
+
+    if verbose:
+        print('Done!')
+
+
 scenarios = {
-    'bidir_conflictless': bidir_conflictless
+    'bidir_conflictless': bidir_conflictless,
+    'bidir_conflictless_subdirs': bidir_conflictless_subdirs,
 }
 
 

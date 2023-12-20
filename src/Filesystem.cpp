@@ -62,19 +62,21 @@ namespace fmerge {
     }
 
 
-    bool ensure_dir(std::string path) {
+    bool ensure_dir(std::string path, bool allow_exists) {
         // Create dir if it does not exist
         if(!get_file_stats(path).has_value()) {
             // Make sure parent directory exists
             auto tokens = split_path(path);
             std::vector<std::string> parent_dir(tokens.begin(), tokens.end() - 1);
-            if(!ensure_dir(path_to_str(parent_dir))) {
+            if(!ensure_dir(path_to_str(parent_dir), allow_exists)) {
                 return false;
             }
 
             if(mkdir(path.c_str(), S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) == -1) {
-                print_clib_error("mkdir");
-                return false;
+                if(errno != EEXIST || !allow_exists) {
+                    print_clib_error("mkdir");
+                    return false;   
+                }
             }
             //LOG("Created " << split_path(path).back() << " directory" << std::endl);
         }

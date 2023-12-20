@@ -14,3 +14,7 @@ add_test(
     NAME bidir_medium_files
     COMMAND python ${TEST_DIR}/run_tests.py --test-bidir-medium-files
 )
+add_test(
+    NAME bidir_simple_subdirs
+    COMMAND python ${TEST_DIR}/run_tests.py --test-bidir-simple-subdirs
+)

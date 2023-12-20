@@ -14,6 +14,8 @@ namespace fmerge {
     std::string to_string(std::array<unsigned char, 16> uuid);
 
     void register_trivial_sigint();
+    
+    template<typename T>
     class SyncBarrier {
     public:
         SyncBarrier() : timeout(0) {}
@@ -32,15 +34,25 @@ namespace fmerge {
             return false;
         }
 
-        inline void notify() {
+        inline T collect_message() {
+            // Warning: This function will not respect your timeout and block forever if necessary, since it *must*
+            // return a valid value. Use wait first to handle the timeout first if necessary.
+            std::unique_lock lk(mtx);
+            cv.wait(lk, [this]{ return proceed; });
+            return message;
+        }
+
+        inline void notify(T _message) {
             std::lock_guard lk(mtx);
             proceed = true;
+            message = _message;
             cv.notify_all();
         }
     private:
         bool proceed{false};
         std::mutex mtx;
         std::condition_variable cv;
+        T message;
         int timeout;
     };
 }
