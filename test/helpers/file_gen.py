@@ -3,6 +3,20 @@ import argparse
 from pathlib import Path
 
 
+def _create_recursive_dirs(path, subdir_levels, subir_base_count, subdir_file_count, payload, suffix, only_last_leaf):
+        if not only_last_leaf or subdir_levels == 0:
+            for i in range(subdir_file_count):
+                # Create files
+                with (path / f'file_{i:04}{suffix}').open('wb') as f:
+                    f.write(payload)
+        if subdir_levels != 0:
+            for i in range(subir_base_count):
+                # Create subdirs
+                child_path = path / f'child_dir_{i:04}'
+                child_path.mkdir()
+                _create_recursive_dirs(child_path, subdir_levels-1, subir_base_count, subdir_file_count, payload, suffix, only_last_leaf)
+
+
 def bidir_conflictless(path, number_of_files, payload_size, verbose=True):
     """
     Generate number_of_files divided over both hosts with no conflicts and no subdirectories.
@@ -62,18 +76,34 @@ def bidir_conflictless_subdirs(path, subdir_levels, subir_base_count, subdir_fil
       filek 
     """
 
-    def create_recursive_dirs(path, subdir_levels, subir_base_count, subdir_file_count, payload, suffix):
-        if not only_last_leaf or subdir_levels == 0:
-            for i in range(subdir_file_count):
-                # Create files
-                with (path / f'file_{i:04}{suffix}').open('wb') as f:
-                    f.write(payload)
-        if subdir_levels != 0:
-            for i in range(subir_base_count):
-                # Create subdirs
-                child_path = path / f'child_dir_{i:04}'
-                child_path.mkdir()
-                create_recursive_dirs(child_path, subdir_levels-1, subir_base_count, subdir_file_count, payload, suffix)
+    peer_a = path / 'peer_a'
+    peer_b = path / 'peer_b'
+
+    try:
+        peer_a.mkdir()
+        peer_b.mkdir()
+    except FileExistsError:
+        if verbose:
+            print('Please clean the working directory before generating the dataset.')
+        return
+    
+    if verbose:
+        print(f'Generating files @ {payload_size} bytes...')
+
+    payload = b'\xFF' * payload_size 
+
+    # Generate the files
+    _create_recursive_dirs(peer_a, subdir_levels, subir_base_count, subdir_file_count, payload, 'a', only_last_leaf)
+    _create_recursive_dirs(peer_b, subdir_levels, subir_base_count, subdir_file_count, payload, 'b', only_last_leaf)
+
+    if verbose:
+        print('Done!')
+
+
+def simplex_conflictless_subdirs(path, subdir_levels, subir_base_count, subdir_file_count, payload_size, verbose=True, only_last_leaf=False):
+    """
+    Generate the same file tree as the duplex_conflictless_subdirs case, but only for one peer
+    """
 
     peer_a = path / 'peer_a'
     peer_b = path / 'peer_b'
@@ -92,8 +122,7 @@ def bidir_conflictless_subdirs(path, subdir_levels, subir_base_count, subdir_fil
     payload = b'\xFF' * payload_size 
 
     # Generate the files
-    create_recursive_dirs(peer_a, subdir_levels, subir_base_count, subdir_file_count, payload, 'a')
-    create_recursive_dirs(peer_b, subdir_levels, subir_base_count, subdir_file_count, payload, 'b')
+    _create_recursive_dirs(peer_a, subdir_levels, subir_base_count, subdir_file_count, payload, 'a', only_last_leaf)
 
     if verbose:
         print('Done!')
@@ -102,6 +131,7 @@ def bidir_conflictless_subdirs(path, subdir_levels, subir_base_count, subdir_fil
 scenarios = {
     'bidir_conflictless': bidir_conflictless,
     'bidir_conflictless_subdirs': bidir_conflictless_subdirs,
+    'simplex_conflictless_subdirs': simplex_conflictless_subdirs,
 }
 
 

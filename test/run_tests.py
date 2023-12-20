@@ -14,7 +14,7 @@ from pathlib import Path
 import shutil
 import argparse
 from helpers import TEST_NG, TEST_OK, TestException
-from helpers.file_gen import bidir_conflictless, bidir_conflictless_subdirs
+from helpers.file_gen import bidir_conflictless, bidir_conflictless_subdirs, simplex_conflictless_subdirs
 import helpers.fmerge_wrapper as fmerge_wrapper
 
 SUPRESS_STDOUT = False
@@ -106,6 +106,21 @@ def test_bidir_simple_subdirs():
     return (TEST_OK, '')
 
 
+def test_simplex_simple_subdirs():
+    # Transfer a moderately large number of small files in the base directory and some depth=1 subfolders.
+    # Do not use conflicts.
+    # Can test for some race conditions in folder creation
+
+    # Create dataset
+    simplex_conflictless_subdirs(TEST_PATH, 3, 3, 20, 10*1024, only_last_leaf=True, verbose=False)
+    # Run client-server pair
+    try:
+        fmerge_wrapper.fmerge(FMERGE_BINARY, TEST_PATH, LOG_DIR / 'bidir_simple_subdirs', server_readiness_wait=3, timeout=10)
+    except TestException as e:
+        return (TEST_NG, str(e))
+
+    return (TEST_OK, '')
+
 ###############################################################################
 ########################   Start of Test Harness   ############################
 ###############################################################################
@@ -113,9 +128,10 @@ def test_bidir_simple_subdirs():
 system_tests = [
     test_check_version,
     test_bidir_small_files,
-    test_simplex_medium_file,
     test_bidir_medium_files,
     test_bidir_simple_subdirs,
+    test_simplex_medium_file,
+    test_simplex_simple_subdirs,
 ]
 
 
@@ -161,7 +177,7 @@ if __name__ == '__main__':
     for test in targets:
         Path('/tmp/fmerge_tests').mkdir()
 
-        print(f'Running {test.__name__}... ', end='', flush=True)
+        print(f'Running {test.__name__ + "...":32} ', end='', flush=True)
         try:
             res, msg = test()
         except Exception as e:
