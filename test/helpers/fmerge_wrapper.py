@@ -1,6 +1,13 @@
 import subprocess
 import time
 from helpers import TestException
+from helpers.util import get_process_threads
+
+
+def save_thread_log(log_prefix, pid_a, pid_b):
+    with open(f'{log_prefix}_a_zombies.log', 'w') as log1, open(f'{log_prefix}_b_zombies.log', 'w') as log2:
+        log1.write(get_process_threads(pid_a))
+        log2.write(get_process_threads(pid_b))
 
 
 def fmerge(fmerge_path, test_path, log_prefix, server_readiness_wait=5, timeout=60, probe_interval=0.1):
@@ -46,6 +53,7 @@ def fmerge(fmerge_path, test_path, log_prefix, server_readiness_wait=5, timeout=
             time.sleep(probe_interval)
         
         # At least one process timed out. Kill it.
+        save_thread_log(log_prefix, p1.pid, p2.pid)
         if res1 is None and res2 is None:
             p1.terminate()
             p2.terminate()

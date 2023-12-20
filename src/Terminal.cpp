@@ -201,6 +201,7 @@ namespace fmerge {
 
 
     void Terminal::istream_listener() {
+        pthread_setname_np(pthread_self(), "fmergestdin");
         // Ignore SIGINT (only used to stop the blocking read)
         register_trivial_sigint();
 
