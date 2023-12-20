@@ -42,6 +42,7 @@ namespace fmerge {
             sync();
             if(!istream_listener_thread_created) return;
             while(!istream_listener_thread.joinable()) {};
+            DEBUG("Sending SIGINT to istream_listener_thread");
             pthread_kill(istream_listener_thread.native_handle(), SIGINT);
             istream_listener_thread.join();
         }
