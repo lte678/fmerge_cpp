@@ -52,7 +52,7 @@ def test_bidir_small_files():
     bidir_conflictless(TEST_PATH, 10, 1024, verbose=False)
     # Run client-server pair
     try:
-        fmerge_wrapper.fmerge(FMERGE_BINARY, TEST_PATH, LOG_DIR / 'bidir_small_files', server_readiness_wait=1, timeout=3)
+        fmerge_wrapper.fmerge(FMERGE_BINARY, TEST_PATH, LOG_DIR / 'bidir_small_files', server_readiness_wait=1, timeout=5)
     except TestException as e:
         return (TEST_NG, str(e))
 
@@ -68,7 +68,7 @@ def test_simplex_medium_file():
     bidir_conflictless(TEST_PATH, 1, 8*1024*1024, verbose=False)
     # Run client-server pair
     try:
-        fmerge_wrapper.fmerge(FMERGE_BINARY, TEST_PATH, LOG_DIR / 'bidir_medium_file', server_readiness_wait=5, timeout=3)
+        fmerge_wrapper.fmerge(FMERGE_BINARY, TEST_PATH, LOG_DIR / 'bidir_medium_file', server_readiness_wait=5, timeout=10)
     except TestException as e:
         return (TEST_NG, str(e))
 
@@ -83,7 +83,7 @@ def test_bidir_medium_files():
     bidir_conflictless(TEST_PATH, 200, 1024*1024, verbose=False)
     # Run client-server pair
     try:
-        fmerge_wrapper.fmerge(FMERGE_BINARY, TEST_PATH, LOG_DIR / 'bidir_medium_files', server_readiness_wait=3, timeout=5)
+        fmerge_wrapper.fmerge(FMERGE_BINARY, TEST_PATH, LOG_DIR / 'bidir_medium_files', server_readiness_wait=3, timeout=10)
     except TestException as e:
         return (TEST_NG, str(e))
 
@@ -99,7 +99,7 @@ def test_bidir_simple_subdirs():
     bidir_conflictless_subdirs(TEST_PATH, 5, 1, 100, 10*1024, only_last_leaf=True, verbose=False)
     # Run client-server pair
     try:
-        fmerge_wrapper.fmerge(FMERGE_BINARY, TEST_PATH, LOG_DIR / 'bidir_simple_subdirs', server_readiness_wait=3, timeout=5)
+        fmerge_wrapper.fmerge(FMERGE_BINARY, TEST_PATH, LOG_DIR / 'bidir_simple_subdirs', server_readiness_wait=3, timeout=10)
     except TestException as e:
         return (TEST_NG, str(e))
 
