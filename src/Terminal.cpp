@@ -209,7 +209,6 @@ namespace fmerge {
         while(true) {
             char user_char;
             int ret = read(STDIN_FILENO, &user_char, 1);
-            LOG("ret = " << ret << std::endl);
             if(ret > 0) {
                 if(user_char == '\n') {
                     // Forward to callback function
@@ -228,6 +227,9 @@ namespace fmerge {
                 if(errno == EINTR) return;
                 
                 print_clib_error("read");
+            } else if(ret == 0) {
+                LOG("[Warning] Unexpected EOF reached for stdin");
+                return;
             }
         }
     }
