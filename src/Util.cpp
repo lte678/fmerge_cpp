@@ -27,12 +27,13 @@ namespace fmerge {
     }
 
 
+    static void _handle_int(int) {}
+
     void register_trivial_sigint() {
-        auto handle_int = [](int){};
         struct sigaction int_handler;
         sigemptyset(&int_handler.sa_mask);
         int_handler.sa_flags = 0;
-        int_handler.sa_handler = handle_int;
+        int_handler.sa_handler = _handle_int;
         if(sigaction(SIGINT, &int_handler, 0)) {
             print_clib_error("sigaction");
         }
