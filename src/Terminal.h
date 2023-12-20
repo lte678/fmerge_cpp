@@ -29,8 +29,15 @@
 
 
 namespace fmerge {
+    class Terminal;
+    extern std::ostream* _stream;
+    extern Terminal* _stream_term;
+    void kill_term();
+    Terminal* term();
+    std::ostream& termbuf();
 
     constexpr int DEFAULT_TERMINAL_WIDTH = 80;
+
 
     class Terminal : public std::stringbuf {
         // NOTE: Make sure to call kill_thread() at program exit (otherwise execution will hang)
@@ -42,7 +49,7 @@ namespace fmerge {
             sync();
             if(!istream_listener_thread_created) return;
             while(!istream_listener_thread.joinable()) {};
-            DEBUG("Sending SIGINT to istream_listener_thread");
+            DEBUG("Sending SIGINT to istream_listener_thread" << std::endl);
             pthread_kill(istream_listener_thread.native_handle(), SIGINT);
             istream_listener_thread.join();
         }
@@ -98,10 +105,4 @@ namespace fmerge {
         std::mutex istream_callback_lock{};
 
     };
-
-    extern std::ostream* _stream;
-    extern Terminal* _stream_term;
-    void kill_term();
-    Terminal* term();
-    std::ostream& termbuf();
 }
