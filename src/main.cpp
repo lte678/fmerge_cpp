@@ -29,7 +29,7 @@ namespace fmerge {
 
 
 int server_mode(std::string path) {
-    termbuf() << "Starting in server mode for \"" << path << "\"" << std::endl;
+    LOG("Starting in server mode for \"" << path << "\"" << std::endl);
 
     if(!exists(path)) {
         std::cerr << "Illegal starting folder" << std::endl;
@@ -47,11 +47,11 @@ int server_mode(std::string path) {
     // Build file tree
     append_changes(path, get_new_tree_changes(path));
 
-    termbuf() << "Waiting for peer connections..." << std::endl;
+    LOG("Waiting for peer connections..." << std::endl);
 
     // Wait for peers
     listen_for_peers(4512, [=, &config](auto conn) {
-        termbuf() << "Accepted connection from " << conn->get_address() << std::endl;
+        LOG("Accepted connection from " << conn->get_address() << std::endl);
 
         StateController controller(std::move(conn), path, config);
         controller.run();
@@ -62,7 +62,7 @@ int server_mode(std::string path) {
 
 
 int client_mode(std::string path, std::string target_address) {
-    termbuf() << "Starting in client mode for \"" << path << "\"" << std::endl;
+    LOG("Starting in client mode for \"" << path << "\"" << std::endl);
 
     if(!exists(path)) {
         std::cerr << "Illegal starting folder" << std::endl;
@@ -82,7 +82,7 @@ int client_mode(std::string path, std::string target_address) {
 
     // Connect to server
     connect_to_server(4512, target_address, [=, &config](auto conn) {
-        termbuf() << "Connected to " << conn->get_address() << std::endl;
+        LOG("Connected to " << conn->get_address() << std::endl);
         
         StateController controller(std::move(conn), path, config);
         controller.run();

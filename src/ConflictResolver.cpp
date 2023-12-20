@@ -51,28 +51,28 @@ namespace fmerge {
 
 
     static void print_change_comparison(const std::vector<Change>& loc, const std::vector<Change>& rem) {
-        termbuf() << make_centered("~~~ LOCAL ~~~", CHANGE_WIDTH) << make_centered("~~~ REMOTE ~~~", CHANGE_WIDTH) << std::endl;
+        LOG(make_centered("~~~ LOCAL ~~~", CHANGE_WIDTH) << make_centered("~~~ REMOTE ~~~", CHANGE_WIDTH) << std::endl);
 
         size_t list_length = std::max(loc.size(), rem.size());
         for(size_t i = 0; i < list_length; i++) {
             // Print left column
             if(i < loc.size()) {
                 const auto& change = loc[i];
-                termbuf() << std::setw(CHANGE_TYPE_WIDTH) << change.type;
-                termbuf() << std::setw(CHANGE_TIME_WIDTH) << timetostr(change.earliest_change_time);
+                LOG(std::setw(CHANGE_TYPE_WIDTH) << change.type);
+                LOG(std::setw(CHANGE_TIME_WIDTH) << timetostr(change.earliest_change_time));
             } else {
-                termbuf() << std::string(CHANGE_WIDTH, ' ');
+                LOG(std::string(CHANGE_WIDTH, ' '));
             }
     
             // Print right column
             if(i < rem.size()) {
                 const auto& change = rem[i];
-                termbuf() << std::setw(CHANGE_TYPE_WIDTH) << change.type;
-                termbuf() << std::setw(CHANGE_TIME_WIDTH) << timetostr(change.earliest_change_time);
+                LOG(std::setw(CHANGE_TYPE_WIDTH) << change.type);
+                LOG(std::setw(CHANGE_TIME_WIDTH) << timetostr(change.earliest_change_time));
             } else {
-                termbuf() << std::string(CHANGE_WIDTH, ' ');
+                LOG(std::string(CHANGE_WIDTH, ' '));
             }
-            termbuf() << std::endl;
+            LOG(std::endl);
         }
     }
 
@@ -84,7 +84,7 @@ namespace fmerge {
         auto key = conflict.conflict_key;
         auto path_tokens = split_path(key);
 
-        termbuf() << "Advanced resolution options:" << std::endl;
+        LOG("Advanced resolution options:" << std::endl);
         std::vector<std::pair<std::string, std::string>> options{};
         options.emplace_back("l", "Keep Local");
         options.emplace_back("r", "Keep Remote");
@@ -134,10 +134,10 @@ namespace fmerge {
         std::string header_str = "RESOLVING " + std::to_string(nr_conflicts) + " CONFLICTS";
 
         // Print the header
-        termbuf() << std::string(HEADER_WIDTH, HEADER_CHAR) << std::endl;
-        termbuf() << make_centered(header_str, HEADER_WIDTH, HEADER_CHAR) << std::endl;
-        termbuf() << std::string(HEADER_WIDTH, HEADER_CHAR) << std::endl;
-        termbuf() << std::endl;
+        LOG(std::string(HEADER_WIDTH, HEADER_CHAR) << std::endl);
+        LOG(make_centered(header_str, HEADER_WIDTH, HEADER_CHAR) << std::endl);
+        LOG(std::string(HEADER_WIDTH, HEADER_CHAR) << std::endl);
+        LOG(std::endl);
 
         for(const auto& conflict : conflicts) {
             auto key = conflict.conflict_key;
@@ -151,11 +151,11 @@ namespace fmerge {
             termbuf() << make_centered(
                 "[ " + std::to_string(resolutions.size()) + " / " + std::to_string(conflicts.size()) + " ]", 
                 HEADER_WIDTH, HEADER_CHAR) << std::endl;
-            termbuf() << make_centered("CONFLICT: " + key, HEADER_WIDTH, HEADER_CHAR) << std::endl;
+            LOG(make_centered("CONFLICT: " + key, HEADER_WIDTH, HEADER_CHAR) << std::endl);
 
             print_change_comparison(loc.at(key), rem.at(key));
 
-            termbuf() << "(Local, Remote, Other) ";
+            LOG("(Local, Remote, Other) ");
             auto choice = term()->prompt_choice("lro");
             if(choice == 'l') {
                 resolutions.emplace(key, ConflictResolution::KeepLocal);

@@ -35,6 +35,8 @@ namespace fmerge {
     }
 
     void Syncer::worker_function(int tid) {
+        pthread_setname_np(pthread_self(), "fmergeworker");
+
         while(true) {
             // Fetch a new task
             std::unique_lock<std::mutex> op_lock(operations_mtx);
@@ -47,9 +49,7 @@ namespace fmerge {
             queued_operations.erase(op_set);
             op_lock.unlock();
 
-            if(g_debug_protocol) {
-                termbuf() << "[DEBUG] [tid:" << tid << "] Processing file " << filepath << std::endl;
-            }
+            DEBUG("[tid:" << tid << "] Processing file " << filepath << std::endl);
 
             // Process that task
 
@@ -77,6 +77,7 @@ namespace fmerge {
                     return false;
                 }
             } else if(op.type == FileOperationType::Transfer) {
+                DEBUG("Requesting file " << filepath << std::endl);
                 peer_conn.send_message(
                     std::make_shared<protocol::FileRequestMessage>(filepath)
                 );
@@ -91,7 +92,7 @@ namespace fmerge {
                         return false; 
                     }
                     i++;
-                    termbuf() << "Waited " << 5*i << "s for " << filepath << std::endl;
+                    LOG("Waited " << 5*i << "s for " << filepath << std::endl);
                 }
                 file_transfer_flags.erase(file_transfer_flags.find(filepath));
                 // File has arrived
@@ -108,15 +109,14 @@ namespace fmerge {
         std::string fullpath = join_path(base_path, ft_payload.path);
 
         if(g_debug_protocol) {
-            termbuf() << "[DEBUG] Received data for " << fullpath << std::endl;
+            LOG("[DEBUG] Received data for " << fullpath << std::endl);
         }
 
         // Create folder for file
         auto path_tokens = split_path(fullpath);
         auto file_folder = path_to_str(std::vector<std::string>(path_tokens.begin(), path_tokens.end() - 1));
-        termbuf() << file_folder << std::endl;
         if(!exists(file_folder)) {
-            //termbuf() << "[Warning] Out of order file transfer. Creating folder for file that should already exist." << std::endl;
+            //LOG("[Warning] Out of order file transfer. Creating folder for file that should already exist." << std::endl);
             if(!ensure_dir(file_folder)) {
                 std::cerr << "[Error] Failed to create directory " << file_folder << std::endl;
                 return;

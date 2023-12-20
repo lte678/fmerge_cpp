@@ -360,7 +360,7 @@ namespace fmerge {
                 num_files_processed++;
 
                 auto path_tokens = split_path(file.path);
-                // termbuf() << "Added " << path_tokens.back() << std::endl;
+                // LOG("Added " << path_tokens.back() << std::endl);
 
                 if(file.is_dir()) {
                     base_node->insert_node(path_tokens, 
@@ -602,7 +602,7 @@ namespace fmerge {
 
     void remove_file_from_tree(std::shared_ptr<DirNode> root_node, const File& file) {
         if(root_node->remove_node(split_path(file.path)) == false) {
-            termbuf() << "[Warning] Failed to delete " << file.path << " from file tree" << std::endl;
+            LOG("[Warning] Failed to delete " << file.path << " from file tree" << std::endl);
         }
     }
 

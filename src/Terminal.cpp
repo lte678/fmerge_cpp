@@ -117,7 +117,7 @@ namespace fmerge {
                 prompt_str << options[i];
             }
             prompt_str << "] ";
-            termbuf() << prompt_str.str() << std::endl;
+            LOG(prompt_str.str() << std::endl);
         };
 
         put_prompt();
@@ -125,7 +125,7 @@ namespace fmerge {
         istream_callback_lock.lock();
         istream_callback = [this, options, callback, put_prompt](std::string response) {
             if(response.length() > 1 || (options.find(response[0]) == string::npos)) {
-                termbuf() << "Invalid option." << std::endl;
+                LOG("Invalid option." << std::endl);
                 put_prompt();
                 return false;
             } else {
@@ -166,9 +166,9 @@ namespace fmerge {
 
         auto put_prompt = [options]() {
             for(const auto& opt : options) {
-                termbuf() << opt.first << ") " << opt.second << std::endl;
+                LOG(opt.first << ") " << opt.second << std::endl);
             }
-            termbuf() << ">" << std::endl;
+            LOG(">" << std::endl);
         };
 
         put_prompt();
@@ -181,7 +181,7 @@ namespace fmerge {
                     return true;
                 }
             }
-            termbuf() << "Invalid option." << std::endl;
+            LOG("Invalid option." << std::endl);
             put_prompt();
             return false;
         };

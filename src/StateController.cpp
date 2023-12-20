@@ -29,11 +29,11 @@ namespace fmerge {
             auto old_state = state.load();
             switch(old_state) {
             case State::AwaitingVersion:
-                termbuf() << "Checking version" << std::endl;
+                LOG("Checking version" << std::endl);
                 send_version();
                 break;
             case State::SendTree:
-                termbuf() << "Sending file tree" << std::endl;
+                LOG("Sending file tree" << std::endl);
                 send_filetree();
                 break;
             case State::ResolvingConflicts:
@@ -49,9 +49,9 @@ namespace fmerge {
                 }
                 break;
             case State::SyncingFiles:
-                termbuf() << "Performing file sync. This may take a while..." << std::endl;
+                LOG("Performing file sync. This may take a while..." << std::endl);
                 do_sync();
-                termbuf() << "Waiting for peer to complete" << std::endl;
+                LOG("Waiting for peer to complete" << std::endl);
                 break;
             case State::Finished:
                 break;
@@ -77,19 +77,17 @@ namespace fmerge {
         } else if(msg->type() == MsgType::ConflictResolutions) {
             return handle_resolutions_message(std::dynamic_pointer_cast<ConflictResolutionsMessage>(msg));
         } else {
-            termbuf() << "[Error] Received invalid message with type " << msg->type() << std::endl;
+            LOG("[Error] Received invalid message with type " << msg->type() << std::endl);
         }
     }
 
 
     void StateController::handle_peer_disconnect() {
-        if(g_debug_protocol) {
-            termbuf() << "[DEBUG] Peer disconnected." << std::endl;
-        }
+        DEBUG("Peer disconnected." << std::endl);
 
         auto s = state.load();
         if(s == State::SyncUserWait) {
-            termbuf() << "Operation cancelled by peer" << std::endl;
+            LOG("Operation cancelled by peer" << std::endl);
             state_lock.lock();
             state = State::Exiting;
             state_lock.unlock();
@@ -134,7 +132,7 @@ namespace fmerge {
         if(state == State::SendTree) {
             state_lock.lock();
             peer_changes = msg->get_payload();
-            termbuf() << "Received " << peer_changes.size() << " changes from peer" << std::endl;
+            LOG("Received " << peer_changes.size() << " changes from peer" << std::endl);
             state_lock.unlock();
 
             state = State::ResolvingConflicts;
@@ -144,6 +142,7 @@ namespace fmerge {
 
     void StateController::handle_file_request_message(std::shared_ptr<FileRequestMessage> msg) {
         auto& ft_payload = msg->get_payload();
+        DEBUG("Peer requested file " << ft_payload << std::endl);
         c->send_message(
             create_file_transfer_message(ft_payload)
         );
@@ -160,8 +159,10 @@ namespace fmerge {
 
         if(fstats->type == FileType::Directory) {
             // Return an empty response. The host does not require any extra data to create a folder.
+            DEBUG("Sending folder placeholder for " << ft_payload << std::endl);
             return std::make_shared<FileTransferMessage>(std::make_unique<FileTransferPayload>(ft_payload, nullptr, *fstats));
         } else if(fstats->type == FileType::File) {
+            DEBUG("Sending file transfer for " << ft_payload << std::endl);
             std::ifstream filestream(file_fullpath, std::ifstream::binary);
             std::shared_ptr<unsigned char> file_buffer((unsigned char*)malloc(fstats->fsize), free);
             if(file_buffer == nullptr) {
@@ -174,6 +175,7 @@ namespace fmerge {
             }
             return std::make_shared<FileTransferMessage>(std::make_unique<FileTransferPayload>(ft_payload, file_buffer, *fstats));
         } else if(fstats->type == FileType::Link) {
+            DEBUG("Sending link transfer for " << ft_payload << std::endl);
             std::shared_ptr<unsigned char> link_buffer((unsigned char*)malloc(fstats->fsize), free);
             if(readlink(file_fullpath.c_str(), reinterpret_cast<char*>(link_buffer.get()), fstats->fsize) == -1) {
                 print_clib_error("readlink");
@@ -190,7 +192,7 @@ namespace fmerge {
     void StateController::handle_exiting_state_message(std::shared_ptr<ExitingStateMessage> msg) {
         if(msg->get_payload().state == State::SyncUserWait) {
             term()->cancel_prompt();
-            termbuf() << "Continuing (triggered by peer)..." << std::endl;
+            LOG("Continuing (triggered by peer)..." << std::endl);
             state_lock.lock();
             state = State::SyncingFiles;
             state_lock.unlock();
@@ -209,7 +211,7 @@ namespace fmerge {
 
 
     void StateController::handle_file_transfer_message(std::shared_ptr<FileTransferMessage> msg) {
-        //termbuf() << "Received " << filepath << " from peer (" << ft_msg->payload_len << " bytes) " << std::endl;
+        //LOG("Received " << filepath << " from peer (" << ft_msg->payload_len << " bytes) " << std::endl);
 
         state_lock.lock();
         auto s = state.load();
@@ -227,10 +229,10 @@ namespace fmerge {
 
 
     void StateController::handle_resolutions_message(std::shared_ptr<ConflictResolutionsMessage> msg) {
-        termbuf() << "Received conflict resolutions from peer:" << std::endl;
+        LOG("Received conflict resolutions from peer:" << std::endl);
         resolutions = msg->get_payload();
         for(const auto& resolution : resolutions) {
-            termbuf() << "    " << std::setw(64) << std::left << resolution.first << ": " << resolution.second << std::endl;
+            LOG("    " << std::setw(64) << std::left << resolution.first << ": " << resolution.second << std::endl);
         }
         // Cancel asking for resolutions locally, since it has already been resolved on the remote
         term()->cancel_prompt();
@@ -250,7 +252,7 @@ namespace fmerge {
 
         // print_sorted_changes(sorted_peer_changes);
 
-        // termbuf() << "Merging..." << std::endl;
+        // LOG("Merging..." << std::endl);
         sorted_local_changes = sort_changes_by_file(read_changes(path));
         state_lock.unlock();
         
@@ -259,7 +261,7 @@ namespace fmerge {
             std::cerr << "!!! Merge conflicts occured for the following paths:" << std::endl;
             sort_conflicts_alphabetically(conflicts);
             print_conflicts(conflicts);
-            termbuf() << std::endl;
+            LOG(std::endl);
 
             auto user_resolutions = ask_for_resolutions(conflicts, sorted_local_changes, sorted_peer_changes);
             // This may be empty, then keep the existing resolutions
@@ -288,7 +290,7 @@ namespace fmerge {
         pending_operations = construct_operation_set(loc, merged_sorted_changes);
         pending_changes = merged_sorted_changes;
 
-        termbuf() << "Pending operations:" << std::endl;
+        LOG("Pending operations:" << std::endl);
         print_sorted_operations(pending_operations);
         state_lock.unlock();
         return {};
@@ -322,7 +324,7 @@ namespace fmerge {
         term()->complete_progress_bar();
 
         write_changes(path, recombine_changes_by_file(sorted_local_changes));
-        termbuf() << "Saved changes to disk" << std::endl;
+        LOG("Saved changes to disk" << std::endl);
 
         state_lock.lock();
         if(peer_finished.load()) {

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Globals.h"
+
 #include <string>
 #include <functional>
 #include <iostream>
@@ -8,6 +10,23 @@
 #include <mutex>
 #include <atomic>
 #include <signal.h>
+
+
+#define LOG(output)                           \
+    do                                        \
+    {                                         \
+        std::unique_lock l(term()->print_mtx);\
+        termbuf() << output;                  \
+    } while (0)
+
+#define DEBUG(output)                         \
+    do                                        \
+    {                                         \
+        std::unique_lock l(term()->print_mtx);\
+        if(g_debug_protocol)                  \
+            termbuf() << "[DEBUG] " << output;\
+    } while (0)
+
 
 namespace fmerge {
 
@@ -45,6 +64,9 @@ namespace fmerge {
 
         // Overridden from std::streambuf
         int sync();
+
+        // This mutex must be acquired before the Terminal ostream is allowed to be used.
+        std::mutex print_mtx;
     private:
         std::ostream& os;
         std::istream& is;

@@ -76,7 +76,7 @@ namespace fmerge {
                 print_clib_error("mkdir");
                 return false;
             }
-            //termbuf() << "Created " << split_path(path).back() << " directory" << std::endl;
+            //LOG("Created " << split_path(path).back() << " directory" << std::endl);
         }
         return true;
     }

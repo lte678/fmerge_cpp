@@ -63,7 +63,7 @@ namespace fmerge {
         msg->serialize(send_func);
         transmit_lock.unlock();
         if(g_debug_protocol) {
-            termbuf() << "[Peer <- Local] Sending " << msg->type() << std::endl;
+            LOG("[Peer <- Local] Sending " << msg->type() << std::endl);
         }
     }
 
@@ -98,6 +98,7 @@ namespace fmerge {
         // Thus, we should block on creating new requests, so we can also limit the max number of responses that we can
         // possibly receive.
 
+        pthread_setname_np(pthread_self(), "fmergelistener");
         register_trivial_sigint();
 
         try {
@@ -106,9 +107,7 @@ namespace fmerge {
                 auto received_header = MessageHeader::deserialize(receive_func);
                 auto received_packet = protocol::deserialize_packet(received_header.type, received_header.length, receive_func);
 
-                if(g_debug_protocol) {
-                    termbuf() << "[Peer -> Local] Received " << received_header.type << std::endl;
-                }
+                DEBUG("[Peer -> Local] Received " << received_header.type << std::endl);
                 // Received message from peer
                 // Wait until worker thread is available
                 join_finished_workers();

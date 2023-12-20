@@ -79,8 +79,8 @@ namespace fmerge {
         unsigned long progress_counter{0};
         float progress_counter_end{static_cast<float>(loc.size() + rem.size())};
 
-        // termbuf() << "Merging " <<  loc.size() + rem.size() << " changes..." << std::endl;
-        // termbuf() << "Using " << loc.bucket_count() << " buckets" << std::endl;
+        // LOG("Merging " <<  loc.size() + rem.size() << " changes..." << std::endl);
+        // LOG("Using " << loc.bucket_count() << " buckets" << std::endl);
 
         term()->start_progress_bar("Merging");
 
@@ -280,9 +280,9 @@ namespace fmerge {
 
         auto it = conflicts.rbegin();
         auto printable = _print_conflicts(it, conflicts.rend(), std::vector<std::string>{});
-        termbuf() << "CONFLICTS:" << std::endl;
+        LOG("CONFLICTS:" << std::endl);
         for(auto p : printable) {
-            termbuf() << p << std::endl;
+            LOG(p << std::endl);
         }
 
         // // Create a database of the sum of conflicts in each subfolder
@@ -356,11 +356,11 @@ namespace fmerge {
 
     void print_sorted_changes(const SortedChangeSet &sorted_changes) {
         for(const auto &change_set : sorted_changes) {
-            termbuf() << "    " << std::setw(64) << std::left << change_set.first << ":";
+            LOG("    " << std::setw(64) << std::left << change_set.first << ":");
             for(const auto &change : change_set.second) {
-                termbuf() << " " << change.type;
+                LOG(" " << change.type);
             }
-            termbuf() << std::endl;
+            LOG(std::endl);
         }
     }
 
@@ -368,7 +368,7 @@ namespace fmerge {
     void print_sorted_operations(const SortedOperationSet &sorted_ops) {
         for(const auto &ops : sorted_ops) {
             for(const auto &op : ops.second) {
-                termbuf() << "    " << op;
+                LOG("    " << op);
             }
         }
     }
