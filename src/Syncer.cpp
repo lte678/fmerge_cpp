@@ -132,7 +132,7 @@ namespace fmerge {
         auto path_tokens = split_path(fullpath);
         auto file_folder = path_to_str(std::vector<std::string>(path_tokens.begin(), path_tokens.end() - 1));
         if(!exists(file_folder)) {
-            LOG("[Warning] Out of order file transfer. Creating folder for file that should already exist." << std::endl);
+            // LOG("[Warning] Out of order file transfer. Creating folder for file that should already exist." << std::endl);
             if(!ensure_dir(file_folder, true)) {
                 std::cerr << "[Error] Failed to create directory " << file_folder << std::endl;
                 return false;
@@ -140,8 +140,11 @@ namespace fmerge {
         }
 
         if(ft_payload.ftype == FileType::Directory) {
+            //if(exists(file_folder)) {
+            //    LOG("[Warning] Attempted to create folder that already exists." << std::endl);
+            //}
             // Create folder
-            if(!ensure_dir(fullpath)) {
+            if(!ensure_dir(fullpath, true)) {
                 return false;
             }
         } else if(ft_payload.ftype == FileType::File) {
