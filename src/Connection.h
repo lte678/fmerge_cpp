@@ -34,7 +34,9 @@ namespace fmerge {
         std::thread listener_thread_handle;
 
         std::atomic<int> resp_handler_worker_count{0};
-        std::vector<std::thread> resp_handler_workers;
+        std::unordered_map<std::thread::id, std::thread> resp_handler_workers;
+        std::vector<std::thread::id> finished_workers;
+        std::mutex finished_workers_mtx;
         void join_finished_workers();
 
         std::atomic<bool> disconnect{false};

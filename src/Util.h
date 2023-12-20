@@ -38,7 +38,7 @@ namespace fmerge {
             cv.notify_all();
         }
     private:
-        bool proceed;
+        bool proceed{false};
         std::mutex mtx;
         std::condition_variable cv;
         int timeout;

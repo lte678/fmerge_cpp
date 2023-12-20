@@ -69,15 +69,19 @@ namespace fmerge {
 
 
     void Connection::join_finished_workers() {
-        auto worker_it = resp_handler_workers.begin();
-        while(worker_it != resp_handler_workers.end()) {
-            if(worker_it->joinable()) {
-                worker_it->join();
-                worker_it = resp_handler_workers.erase(worker_it);
+        std::unique_lock l(finished_workers_mtx);
+        for(auto tid : finished_workers) {
+            //DEBUG("Joining worker with thread id " << tid << std::endl);
+            auto worker_it = resp_handler_workers.find(tid);
+            if(worker_it != resp_handler_workers.end()) {
+                worker_it->second.join();
+                resp_handler_workers.erase(worker_it);
+                resp_handler_worker_count--;
             } else {
-                worker_it++;
+                std::cerr << "[Error] Tried to join invalid worker thread" << std::endl;
             }
         }
+        finished_workers.clear();
     }
 
 
@@ -106,16 +110,26 @@ namespace fmerge {
                     termbuf() << "[Peer -> Local] Received " << received_header.type << std::endl;
                 }
                 // Received message from peer
-                join_finished_workers(); // Try joining any finished processes
                 // Wait until worker thread is available
+                join_finished_workers();
+                if(resp_handler_worker_count >= MAX_WORKERS) LOG("Warning: Max receive worker count reached. This can cause deadlocks." << std::endl);
                 while(resp_handler_worker_count >= MAX_WORKERS) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                    join_finished_workers();
                 }
                 // Create worker thread
-                resp_handler_workers.push_back(std::thread{ 
+                resp_handler_worker_count++;
+                auto worker = std::thread{ 
                     [this, callback, received_packet]()
-                        { callback(received_packet); resp_handler_worker_count--; } 
-                });
+                        {
+                            callback(received_packet);
+                            std::unique_lock l(finished_workers_mtx);
+                            finished_workers.emplace_back(std::this_thread::get_id()); } 
+                };
+                {
+                    std::unique_lock l(finished_workers_mtx);
+                    resp_handler_workers.emplace(worker.get_id(), std::move(worker));
+                }
             }
         } catch(const connection_terminated_exception& e) {
             terminate_callback();

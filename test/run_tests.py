@@ -59,6 +59,22 @@ def test_bidir_small_files():
     return (TEST_OK, '')
 
 
+def test_simplex_medium_file():
+    # Try to transfer a single medium sized file.
+    # This is to avoid investigating deadlocks, and instead just the medium file capabilities.
+    # A medium file is one that is larger than the socket buffer, but smaller than RAM and the 4GB limit.
+
+    # Create dataset
+    bidir_conflictless(TEST_PATH, 1, 8*1024*1024, verbose=False)
+    # Run client-server pair
+    try:
+        fmerge_wrapper.fmerge(FMERGE_BINARY, TEST_PATH, LOG_DIR / 'bidir_medium_file', server_readiness_wait=5, timeout=3)
+    except TestException as e:
+        return (TEST_NG, str(e))
+
+    return (TEST_OK, '')
+
+
 def test_bidir_medium_files():
     # Transfer a moderately large number of medium sized files (reasonable good realistic workload)
     # Do not use conflicts. Do not include subfolders
@@ -67,12 +83,11 @@ def test_bidir_medium_files():
     bidir_conflictless(TEST_PATH, 200, 1024*1024, verbose=False)
     # Run client-server pair
     try:
-        fmerge_wrapper.fmerge(FMERGE_BINARY, TEST_PATH, LOG_DIR / 'bidir_medium_files', timeout=15)
+        fmerge_wrapper.fmerge(FMERGE_BINARY, TEST_PATH, LOG_DIR / 'bidir_medium_files', server_readiness_wait=3, timeout=5)
     except TestException as e:
         return (TEST_NG, str(e))
 
     return (TEST_OK, '')
-
 
 
 ###############################################################################
@@ -82,7 +97,8 @@ def test_bidir_medium_files():
 system_tests = [
     test_check_version,
     test_bidir_small_files,
-    test_bidir_medium_files
+    test_simplex_medium_file,
+    test_bidir_medium_files,
 ]
 
 
@@ -128,7 +144,7 @@ if __name__ == '__main__':
     for test in targets:
         Path('/tmp/fmerge_tests').mkdir()
 
-        print(f'Running {test.__name__}... ', end='')
+        print(f'Running {test.__name__}... ', end='', flush=True)
         try:
             res, msg = test()
         except Exception as e:
