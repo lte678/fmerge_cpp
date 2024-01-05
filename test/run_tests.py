@@ -13,6 +13,7 @@ import subprocess
 from pathlib import Path
 import shutil
 import argparse
+import time
 from helpers import TEST_NG, TEST_OK, TestException
 from helpers.file_gen import bidir_conflictless, bidir_conflictless_subdirs, simplex_conflictless_subdirs
 import helpers.fmerge_wrapper as fmerge_wrapper
@@ -107,7 +108,7 @@ def test_bidir_simple_subdirs():
 
 
 def test_simplex_simple_subdirs():
-    # Transfer a moderately large number of small files in the base directory and some depth=1 subfolders.
+    # Transfer a moderately large number of small files in the base directory and some depth=3 subfolders.
     # Do not use conflicts.
     # Can test for some race conditions in folder creation
 
@@ -116,6 +117,36 @@ def test_simplex_simple_subdirs():
     # Run client-server pair
     try:
         fmerge_wrapper.fmerge(FMERGE_BINARY, TEST_PATH, LOG_DIR / 'bidir_simple_subdirs', server_readiness_wait=3, timeout=10)
+    except TestException as e:
+        return (TEST_NG, str(e))
+
+    return (TEST_OK, '')
+
+
+def test_tree_deletion():
+    # Transfer a moderately large number of small files in the base directory and some depth=3 subfolders.
+    # Do not use conflicts.
+    # Can test for some race conditions in folder creation
+
+    # Create dataset
+    simplex_conflictless_subdirs(TEST_PATH, 2, 6, 1, 10*1024, only_last_leaf=True, verbose=False)
+    # Run client-server pair
+    try:
+        fmerge_wrapper.fmerge(FMERGE_BINARY, TEST_PATH, LOG_DIR / 'tree_deletion_part1', server_readiness_wait=3, timeout=5)
+    except TestException as e:
+        return (TEST_NG, str(e))
+    
+    # Now that we have both folders filled with data, delete one peer's files
+    for p in os.scandir(TEST_PATH / 'peer_a'):
+        if not p.name == ".fmerge":
+            shutil.rmtree(p)
+
+    # Wait for the timestamp to change
+    time.sleep(1)
+
+    # Check if deletions are propagated
+    try:
+        fmerge_wrapper.fmerge(FMERGE_BINARY, TEST_PATH, LOG_DIR / 'tree_deletion_part2', server_readiness_wait=3, timeout=5)
     except TestException as e:
         return (TEST_NG, str(e))
 
@@ -132,6 +163,7 @@ system_tests = [
     test_bidir_simple_subdirs,
     test_simplex_medium_file,
     test_simplex_simple_subdirs,
+    test_tree_deletion,
 ]
 
 

@@ -25,6 +25,7 @@ using namespace fmerge;
 namespace fmerge {
     bool g_debug_protocol{false};
     bool g_ask_confirmation{true};
+    int g_exit_code{0};
 }
 
 
@@ -199,9 +200,11 @@ int main(int argc, char* argv[]) {
 
     // Run server
     if(mode == 0) {
-        return server_mode(path_opt);
+        server_mode(path_opt);
+        return g_exit_code;
     } else if(mode == 1) {
-        return client_mode(path_opt, target_address);
+        client_mode(path_opt, target_address);
+        return g_exit_code;
     }
 
     // Not using termbuf prevents an extra newline from being inserted

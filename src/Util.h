@@ -14,6 +14,7 @@ namespace fmerge {
     std::string to_string(std::array<unsigned char, 16> uuid);
 
     void register_trivial_sigint();
+    std::string make_centered(const std::string& contents, int width, char padding_char = ' ');
     
     template<typename T>
     class SyncBarrier {

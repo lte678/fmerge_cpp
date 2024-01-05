@@ -25,6 +25,8 @@ namespace fmerge {
         void perform_sync();
         void submit_file_transfer(const protocol::FileTransferPayload &ft_payload);
         bool _submit_file_transfer(const protocol::FileTransferPayload &ft_payload);
+
+        int get_error_count() { return error_count.load(); }
     private:
         SortedOperationSet &queued_operations;
         std::mutex operations_mtx;
@@ -39,6 +41,8 @@ namespace fmerge {
 
         std::string base_path;
         Connection &peer_conn;
+
+        std::atomic_int error_count{0};
 
         void worker_function(int tid);
         // Returns true if file was processed successfully

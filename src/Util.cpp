@@ -38,5 +38,20 @@ namespace fmerge {
             print_clib_error("sigaction");
         }
     }
+
+
+    std::string make_centered(const std::string& contents, int width, char padding_char) {
+        auto inner_width = static_cast<int>(contents.length());
+
+        // Amount of padding to put on left and right
+        int padding_l = 0;
+        int padding_r = 0;
+        if(inner_width < width - 3) {
+            padding_l = (width - inner_width) / 2 - 1;
+            padding_r = width - inner_width - padding_l - 2;
+        }
+
+        return std::string(padding_l, padding_char) + " " + contents + " " + std::string(padding_r, padding_char);
+    }
     
 }

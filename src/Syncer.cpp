@@ -61,7 +61,8 @@ namespace fmerge {
             bool successful = process_file(op_list);
             
             if(!successful) {
-                std::cerr << "[Error] File " << filepath << " is in a conflicted state!" << std::endl;
+                LOG("[Error] File " << filepath << " is in a conflicted state!" << std::endl);
+                error_count++;
             }
             std::unique_lock<std::mutex> cb_lock(callback_mtx);
             if(completion_callback) completion_callback(filepath, successful);

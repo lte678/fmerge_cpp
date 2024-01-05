@@ -333,6 +333,16 @@ namespace fmerge {
         write_changes(path, recombine_changes_by_file(sorted_local_changes));
         LOG("Saved changes to disk" << std::endl);
 
+        if(syncer->get_error_count() > 0) {
+            // Set the global exit code to 1
+            g_exit_code = 1;
+            std::stringstream ss{};
+            ss << "WARNING: " << syncer->get_error_count() << " errors encountered while syncing!";
+            LOG("================================================================================" << std::endl);
+            LOG(make_centered(ss.str(), 80, '=') << std::endl);
+            LOG("================================================================================" << std::endl);
+        }
+
         state_lock.lock();
         if(peer_finished.load()) {
             state = State::Exiting;
