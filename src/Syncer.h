@@ -22,13 +22,16 @@ namespace fmerge {
         Syncer(SortedOperationSet &operations, std::string _base_path, Connection &_peer_conn);
         Syncer(SortedOperationSet &operations, std::string _base_path, Connection &_peer_conn, CompletionCallback _status_callback);
 
+        std::pair<SortedOperationSet, SortedOperationSet> split_operations(SortedOperationSet &operations);
+
         void perform_sync();
         void submit_file_transfer(const protocol::FileTransferPayload &ft_payload);
         bool _submit_file_transfer(const protocol::FileTransferPayload &ft_payload);
 
         int get_error_count() { return error_count.load(); }
     private:
-        SortedOperationSet &queued_operations;
+        SortedOperationSet queued_parallel_operations{};
+        SortedOperationSet queued_sequential_operations{};
         std::mutex operations_mtx;
         // Status callback that is called after every processed file with the (completed, total) number of files
         CompletionCallback completion_callback;
@@ -45,6 +48,7 @@ namespace fmerge {
         std::atomic_int error_count{0};
 
         void worker_function(int tid);
+        void sequential_function();
         // Returns true if file was processed successfully
         bool process_file(const std::vector<FileOperation> &ops);
     };

@@ -11,8 +11,10 @@
 namespace fmerge {
     Syncer::Syncer(SortedOperationSet &operations, std::string _base_path, Connection &_peer_conn) : Syncer(operations, _base_path, _peer_conn, nullptr) {}
 
-    Syncer::Syncer(SortedOperationSet &operations, std::string _base_path, Connection &_peer_conn, CompletionCallback _status_callback) : queued_operations(operations), peer_conn(_peer_conn) {
-        queued_operations = operations;
+    Syncer::Syncer(SortedOperationSet &operations, std::string _base_path, Connection &_peer_conn, CompletionCallback _status_callback) : peer_conn(_peer_conn) {
+        auto[q1, q2] = split_operations(operations);
+        queued_parallel_operations = std::move(q1);
+        queued_sequential_operations = std::move(q2);
         completion_callback = _status_callback;
         base_path = _base_path;
     }
@@ -24,6 +26,10 @@ namespace fmerge {
                 std::thread{[this, i](){worker_function(i);}}
             );
         }
+
+        // Use this thread as the sequential worker
+        sequential_function();
+
         // Wait for threads to finish processing everything
         for(auto &t: worker_threads) {
             t.join();
@@ -41,12 +47,12 @@ namespace fmerge {
             // Fetch a new task
             std::unique_lock<std::mutex> op_lock(operations_mtx);
             // We are done syncing.
-            if(queued_operations.size() == 0) return;
+            if(queued_parallel_operations.size() == 0) return;
             // List of operations to apply to the file
-            auto op_set = queued_operations.begin();
+            auto op_set = queued_parallel_operations.begin();
             auto filepath = op_set->first;
             auto op_list = op_set->second;
-            queued_operations.erase(op_set);
+            queued_parallel_operations.erase(op_set);
             op_lock.unlock();
 
             DEBUG("[tid:" << tid << "] Processing file " << filepath << std::endl);
@@ -68,6 +74,56 @@ namespace fmerge {
             if(completion_callback) completion_callback(filepath, successful);
         }
     }
+
+
+    void Syncer::sequential_function() {
+        for(auto op : queued_sequential_operations) {
+            const auto& filepath = op.first;
+            const auto& op_list = op.second;
+            DEBUG("[seq. thread] Processing file " << filepath << std::endl);
+
+            // Process that task
+
+            // For us to accurately reproduce the new file history, all operations
+            // have to be executed successfully. If this fails, we will have to resolve it
+            // or leave the file history in a dirty state, which will be corrected at
+            // the next database rebuild and merge.
+
+            bool successful = process_file(op_list);
+            
+            if(!successful) {
+                LOG("[Error] File " << filepath << " is in a conflicted state!" << std::endl);
+                error_count++;
+            }
+            std::unique_lock<std::mutex> cb_lock(callback_mtx);
+            if(completion_callback) completion_callback(filepath, successful);
+        }
+    }
+
+
+    static bool is_sequential_operation(std::vector<FileOperation> ops) {
+        for(const auto& op : ops) {
+            if(op.type == FileOperationType::Delete) return true;
+        }
+        return false;
+    }
+
+
+    std::pair<SortedOperationSet, SortedOperationSet> Syncer::split_operations(SortedOperationSet &operation_map) {
+        SortedOperationSet parallel_ops{};
+        SortedOperationSet sequential_ops{};
+        
+        for(const auto& op : operation_map) {
+            if(is_sequential_operation(op.second)) {
+                sequential_ops.emplace(op);
+            } else {
+                parallel_ops.emplace(op);
+            }
+        }
+
+        return {parallel_ops, sequential_ops};
+    }
+
 
     bool Syncer::process_file(const std::vector<FileOperation> &ops) {
         for(const auto& op : ops) {

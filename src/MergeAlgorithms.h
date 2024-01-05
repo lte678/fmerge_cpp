@@ -41,7 +41,7 @@ namespace fmerge {
         friend std::ostream& operator<<(std::ostream& os, const FileOperation& fop);
     };
 
-    typedef std::map<std::string, std::vector<FileOperation>, std::less<std::string>> SortedOperationSet;
+    typedef std::map<std::string, std::vector<FileOperation>, std::greater<std::string>> SortedOperationSet;
 
 
     enum class ConflictResolution {
