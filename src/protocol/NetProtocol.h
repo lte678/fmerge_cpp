@@ -16,18 +16,6 @@ namespace fmerge::protocol {
     // ---------------------------- Payload Definitions -------------------------------
     // --------------------------------------------------------------------------------
 
-    struct VersionPayload {
-        VersionPayload(int _major, int _minor, std::array<unsigned char, 16> _uuid) :
-            major(_major), minor(_minor), uuid(_uuid) {}
-
-        int major{};
-        int minor{};
-        std::array<unsigned char, 16> uuid{};
-
-        void serialize(WriteFunc write) const;
-        static std::unique_ptr<VersionPayload> deserialize(ReadFunc receive, unsigned long length);
-    };
-
 
     struct ChangesPayload : public std::vector<Change> {
         using std::vector<Change>::vector;
@@ -104,9 +92,9 @@ namespace fmerge::protocol {
     };
 
 
-    class VersionMessage : public Message<VersionPayload> {
+    class VersionMessage : public Message<StringPayload> {
     public:
-        using Message<VersionPayload>::Message;
+        using Message<StringPayload>::Message;
         VersionMessage() = delete;
         MsgType type() const override { return MsgType::Version; }
     };

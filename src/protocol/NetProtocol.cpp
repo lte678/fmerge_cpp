@@ -7,30 +7,6 @@
 
 namespace fmerge::protocol {
 
-    void VersionPayload::serialize(WriteFunc write) const {
-        unsigned int netmajor = htole32(major);
-        write(&netmajor, sizeof(netmajor));
-        unsigned int netminor = htole32(minor);
-        write(&netminor, sizeof(netminor));
-
-        write(uuid.data(), uuid.size());
-    }
-
-
-    std::unique_ptr<VersionPayload> VersionPayload::deserialize(ReadFunc receive, unsigned long) {
-        unsigned int major{};
-        receive(&major, sizeof(major));
-        major = le32toh(major);
-        unsigned int minor{};
-        receive(&minor, sizeof(minor));
-        minor = le32toh(minor);
-
-        std::array<unsigned char, 16> uuid;
-        receive(uuid.data(), uuid.size());
-
-        return std::make_unique<VersionPayload>(major, minor, uuid);
-    }
-
     void ChangesPayload::serialize(WriteFunc write) const {
         std::stringstream ser_stream;
         serialize_changes(ser_stream, *this);

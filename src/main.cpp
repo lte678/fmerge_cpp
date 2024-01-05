@@ -4,7 +4,7 @@
 #include "Config.h"
 #include "StateController.h"
 #include "Terminal.h"
-#include "Globals.h"
+#include "Version.h"
 
 #include <unistd.h>
 #include <getopt.h>
@@ -163,7 +163,7 @@ int main(int argc, char* argv[]) {
             mode = 1;
             target_address = optarg;
         } else if(opt == 'v') {
-            std::cout << "Version " << MAJOR_VERSION << "." << MINOR_VERSION << std::endl;
+            std::cout << "Version " << g_fmerge_version << std::endl;
             return 0;
         } else if(opt == 'y') {
             g_ask_confirmation = false;

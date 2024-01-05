@@ -1,0 +1,4 @@
+#include "Version.h"
+namespace fmerge {
+    const char *g_fmerge_version = "dev~@GIT_HASH@";
+}

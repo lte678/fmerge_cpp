@@ -4,6 +4,7 @@
 #include "Errors.h"
 #include "Terminal.h"
 #include "Globals.h"
+#include "Version.h"
 #include "protocol/NetProtocolRegistry.h"
 
 #include <memory>
@@ -102,26 +103,29 @@ namespace fmerge {
 
 
     void StateController::send_version() {
-        std::array<unsigned char, 16> uuid{};
         std::string our_uuid = config.value("uuid", "");
-        if(uuid_parse(our_uuid.c_str(), uuid.data()) == -1) {
-            std::cerr << "Error parsing our UUID!" << std::endl;
-            return;
-        }
+        std::string version_payload = std::string(g_fmerge_version) + ";" + our_uuid;
         c->send_message(
-            std::make_shared<VersionMessage>(std::make_unique<VersionPayload>(MAJOR_VERSION, MINOR_VERSION, uuid))
+            std::make_shared<VersionMessage>(std::make_unique<StringPayload>(version_payload))
         );
     }
 
 
     void StateController::handle_version_message(std::shared_ptr<VersionMessage> msg) {
         auto& ver_payload = msg->get_payload();
+        auto peer_version = ver_payload.substr(ver_payload.find(';'));
 
-        if (ver_payload.major != MAJOR_VERSION || ver_payload.minor != MINOR_VERSION) { 
-            std::cerr << "Peer has invalid version!";
-            std::cerr << " Peer : v" << ver_payload.major << "." << ver_payload.minor;
-            std::cerr << " Local: v" << MAJOR_VERSION << "." << MINOR_VERSION;
-            return;
+        auto version_ok = check_peer_version(g_fmerge_version, peer_version);
+        if (version_ok != NoError) { 
+            LOG("Version mismatch:" << std::endl);
+            LOG(" Peer : " << peer_version << std::endl);
+            LOG(" Local: " << g_fmerge_version << std::endl);
+            LOG("Continue? ");
+            auto user_choice = term()->prompt_choice("yn");
+            if(user_choice == 'n' || user_choice == '\0') {
+                state = State::Exiting;
+                return;
+            }
         }
 
         if(state == State::AwaitingVersion) state = State::SendTree;            
