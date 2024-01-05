@@ -63,7 +63,7 @@ namespace fmerge {
         msg->serialize(send_func);
         transmit_lock.unlock();
         if(g_debug_protocol) {
-            LOG("[Peer <- Local] Sending " << msg->type() << std::endl);
+            DEBUG("[Peer <- Local] Sending " << msg->type() << std::endl);
         }
     }
 

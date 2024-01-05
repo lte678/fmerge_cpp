@@ -217,9 +217,11 @@ namespace fmerge {
                         // True indicates the callback should be disabled after this
                         if(istream_callback(user_string)) {
                             istream_callback = {};
+                            cancel_callback = {};
                         }
                     }
                     istream_callback_lock.unlock();
+                    user_string.clear();
                 } else {
                     user_string.push_back(user_char);
                 }
