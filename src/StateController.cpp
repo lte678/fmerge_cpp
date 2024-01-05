@@ -113,16 +113,16 @@ namespace fmerge {
 
     void StateController::handle_version_message(std::shared_ptr<VersionMessage> msg) {
         auto& ver_payload = msg->get_payload();
-        auto peer_version = ver_payload.substr(ver_payload.find(';'));
+        auto peer_version = ver_payload.substr(0, ver_payload.find(';'));
 
         auto version_ok = check_peer_version(g_fmerge_version, peer_version);
         if (version_ok != NoError) { 
-            LOG("Version mismatch:" << std::endl);
+            LOG("Version mismatch (code " << version_ok << "):" << std::endl);
             LOG(" Peer : " << peer_version << std::endl);
             LOG(" Local: " << g_fmerge_version << std::endl);
             LOG("Continue? ");
             auto user_choice = term()->prompt_choice("yn");
-            if(user_choice == 'n' || user_choice == '\0') {
+            if(user_choice == 'n') {
                 state = State::Exiting;
                 return;
             }
@@ -208,6 +208,10 @@ namespace fmerge {
                 state = State::Exiting;
                 state_lock.unlock();
             }
+        } else if(msg->get_payload().state == State::AwaitingVersion) {
+            // The user accepted the version difference at the peer
+            term()->cancel_prompt();
+            LOG("Continuing (triggered by peer)..." << std::endl);
         } else {
             std::cerr << "Error: Received unknown exit state message from peer" << std::endl;
         }

@@ -63,7 +63,7 @@ namespace fmerge {
 
     static bool is_dev_version(std::string ver) {
         if(ver.size() >= 3) {
-            if(ver.substr(0, 3) == "ver") {
+            if(ver.substr(0, 3) == "dev") {
                 return true;
             }
         }

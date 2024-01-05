@@ -253,6 +253,8 @@ namespace fmerge {
         }
 
         if(connect(sock, result->ai_addr, result->ai_addrlen) == -1) {
+            char *ip = inet_ntoa(((struct sockaddr_in*)result->ai_addr)->sin_addr);
+            LOG("Could not connect to host " << server_addr << " (" << ip << ")" << std::endl);
             print_clib_error("connect");
             return;
         }
