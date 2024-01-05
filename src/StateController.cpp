@@ -34,8 +34,6 @@ namespace fmerge {
                 send_version();
                 break;
             case State::SendTree:
-                LOG("Sending file tree" << std::endl);
-                send_filetree();
                 break;
             case State::ResolvingConflicts:
                 do_merge();
@@ -128,7 +126,8 @@ namespace fmerge {
             }
         }
 
-        if(state == State::AwaitingVersion) state = State::SendTree;            
+        state = State::SendTree;  
+        c->send_message(std::make_shared<ExitingStateMessage>(State::AwaitingVersion));
     }
 
 
@@ -140,6 +139,8 @@ namespace fmerge {
             state_lock.unlock();
 
             state = State::ResolvingConflicts;
+        } else {
+            LOG("[Warning] Received unexpected 'Changes' message from peer" << std::endl);
         }
     }
 
@@ -210,7 +211,8 @@ namespace fmerge {
         } else if(msg->get_payload().state == State::AwaitingVersion) {
             // The user accepted the version difference at the peer
             term()->cancel_prompt();
-            LOG("Continuing (triggered by peer)..." << std::endl);
+            LOG("Sending file tree" << std::endl);
+            send_filetree();
         } else {
             std::cerr << "Error: Received unknown exit state message from peer" << std::endl;
         }
