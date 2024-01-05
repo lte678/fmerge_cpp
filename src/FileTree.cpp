@@ -295,35 +295,39 @@ namespace fmerge {
     }
 
 
-    Change Change::deserialize(std::istream& stream) {
+    std::optional<Change> Change::deserialize(std::istream& stream) {
         Change ret{};
         std::stringbuf buffer{};
 
-        stream.get(buffer, ',');
-        stream.seekg(1, std::ios_base::cur); // Seek to after the delimiter
-        ret.type = static_cast<ChangeType>(std::stoi(buffer.str()));
-        buffer.str("");
+        try {
+            stream.get(buffer, ',');
+            stream.seekg(1, std::ios_base::cur); // Seek to after the delimiter
+            ret.type = static_cast<ChangeType>(std::stoi(buffer.str()));
+            buffer.str("");
 
-        stream.get(buffer, ',');
-        stream.seekg(1, std::ios_base::cur); // Seek to after the delimiter
-        ret.earliest_change_time = std::stol(buffer.str());
-        buffer.str("");
+            stream.get(buffer, ',');
+            stream.seekg(1, std::ios_base::cur); // Seek to after the delimiter
+            ret.earliest_change_time = std::stol(buffer.str());
+            buffer.str("");
 
-        stream.get(buffer, ',');
-        stream.seekg(1, std::ios_base::cur); // Seek to after the delimiter
-        ret.latest_change_time = std::stol(buffer.str());
-        buffer.str("");
+            stream.get(buffer, ',');
+            stream.seekg(1, std::ios_base::cur); // Seek to after the delimiter
+            ret.latest_change_time = std::stol(buffer.str());
+            buffer.str("");
 
-        stream.get(buffer, ',');
-        stream.seekg(1, std::ios_base::cur); // Seek to after the delimiter
-        ret.file.type = static_cast<FileType>(std::stoi(buffer.str()));
-        buffer.str("");
+            stream.get(buffer, ',');
+            stream.seekg(1, std::ios_base::cur); // Seek to after the delimiter
+            ret.file.type = static_cast<FileType>(std::stoi(buffer.str()));
+            buffer.str("");
 
-        stream.get(buffer, '\n');
-        stream.seekg(1, std::ios_base::cur); // Seek to after the delimiter
-        ret.file.path = buffer.str();
+            stream.get(buffer, '\n');
+            stream.seekg(1, std::ios_base::cur); // Seek to after the delimiter
+            ret.file.path = buffer.str();
 
-        return ret;
+            return ret;
+        } catch(...) {
+            return std::nullopt;
+        }
     }
 
 
@@ -504,13 +508,17 @@ namespace fmerge {
     std::vector<Change> deserialize_changes(std::istream& stream) {
         std::vector<Change> changes;
 
-        Change current_change{.type = ChangeType::Unknown};
+        std::optional<Change> current_change{std::nullopt};
         while(true) {
             current_change = Change::deserialize(stream);
-            if(current_change.type == ChangeType::TerminateList) {
+            if(!current_change.has_value()) {
+                LOG("[Error] Could not parse change in line " << (changes.size()+1) << std::endl);
+                exit(1);
+            }
+            if(current_change->type == ChangeType::TerminateList) {
                 return changes;
             }
-            changes.push_back(current_change);
+            changes.push_back(*current_change);
         }
     }
 

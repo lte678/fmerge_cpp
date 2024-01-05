@@ -201,13 +201,12 @@ namespace fmerge {
             state = State::SyncingFiles;
             state_lock.unlock();
         } else if(msg->get_payload().state == State::SyncingFiles) {
+            state_lock.lock();
             peer_finished.store(true);
-
             if(state.load() == State::Finished) {
-                state_lock.lock();
                 state = State::Exiting;
-                state_lock.unlock();
             }
+            state_lock.unlock();
         } else if(msg->get_payload().state == State::AwaitingVersion) {
             // The user accepted the version difference at the peer
             term()->cancel_prompt();
@@ -324,10 +323,8 @@ namespace fmerge {
                 term()->update_progress_bar(static_cast<float>(processed_change_count) / static_cast<float>(total_changes));
             }
         });
-
+        // This is where the file sync is performed
         syncer->perform_sync();
-        // Notify our peer that we are done
-        c->send_message(std::make_shared<ExitingStateMessage>(state.load()));
 
         term()->complete_progress_bar();
 
@@ -341,6 +338,9 @@ namespace fmerge {
             state = State::Finished;
         }
         state_lock.unlock();
+
+        // Notify our peer that we are done
+        c->send_message(std::make_shared<ExitingStateMessage>(State::SyncingFiles));
     }
 
 

@@ -89,7 +89,7 @@ namespace fmerge {
         friend bool operator==(const Change& lhs, const Change& rhs);
 
         void serialize(std::ostream& stream) const;
-        static Change deserialize(std::istream& stream);
+        static std::optional<Change> deserialize(std::istream& stream);
     };
 
     void update_file_tree(shared_ptr<DirNode> base_node, std::string base_path, bool show_loading_bar = true);
