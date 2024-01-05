@@ -22,3 +22,7 @@ add_test(
     NAME simplex_simple_subdirs
     COMMAND python ${TEST_DIR}/run_tests.py --test-simplex-simple-subdirs
 )
+add_test(
+    NAME tree_deletion
+    COMMAND python ${TEST_DIR}/run_tests.py --test-tree-deletion
+)

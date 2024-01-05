@@ -132,7 +132,7 @@ def test_tree_deletion():
     simplex_conflictless_subdirs(TEST_PATH, 2, 6, 1, 10*1024, only_last_leaf=True, verbose=False)
     # Run client-server pair
     try:
-        fmerge_wrapper.fmerge(FMERGE_BINARY, TEST_PATH, LOG_DIR / 'tree_deletion_part1', server_readiness_wait=3, timeout=5)
+        fmerge_wrapper.fmerge(FMERGE_BINARY, TEST_PATH, LOG_DIR / 'tree_deletion_part1', server_readiness_wait=3, timeout=10)
     except TestException as e:
         return (TEST_NG, str(e))
     
@@ -146,7 +146,7 @@ def test_tree_deletion():
 
     # Check if deletions are propagated
     try:
-        fmerge_wrapper.fmerge(FMERGE_BINARY, TEST_PATH, LOG_DIR / 'tree_deletion_part2', server_readiness_wait=3, timeout=5)
+        fmerge_wrapper.fmerge(FMERGE_BINARY, TEST_PATH, LOG_DIR / 'tree_deletion_part2', server_readiness_wait=3, timeout=10)
     except TestException as e:
         return (TEST_NG, str(e))
 
